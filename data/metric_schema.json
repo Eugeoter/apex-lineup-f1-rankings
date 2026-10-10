@@ -1,0 +1,65 @@
+{
+  "normalisation": "min-max within each season",
+  "metrics": [
+    {
+      "key": "championship_points",
+      "label": "Championship points",
+      "higher_is_better": true
+    },
+    {
+      "key": "points_per_start",
+      "label": "Points per Grand Prix start",
+      "higher_is_better": true
+    },
+    {
+      "key": "wins",
+      "label": "Grand Prix wins",
+      "higher_is_better": true
+    },
+    {
+      "key": "podium_rate",
+      "label": "Grand Prix podium rate",
+      "higher_is_better": true
+    },
+    {
+      "key": "average_finish_position",
+      "label": "Average Grand Prix finish",
+      "higher_is_better": false
+    },
+    {
+      "key": "average_qualifying_position",
+      "label": "Average Grand Prix qualifying position",
+      "higher_is_better": false
+    },
+    {
+      "key": "average_positions_gained",
+      "label": "Average Grand Prix positions gained",
+      "higher_is_better": true
+    },
+    {
+      "key": "finish_rate",
+      "label": "Grand Prix finish rate",
+      "higher_is_better": true
+    },
+    {
+      "key": "race_pace_score",
+      "label": "Grand Prix pace score",
+      "higher_is_better": true
+    },
+    {
+      "key": "lap_consistency_score",
+      "label": "Grand Prix lap consistency",
+      "higher_is_better": true
+    },
+    {
+      "key": "overtakes_per_start",
+      "label": "Overtakes per competitive start",
+      "higher_is_better": true
+    },
+    {
+      "key": "net_overtakes_per_start",
+      "label": "Net overtakes per competitive start",
+      "higher_is_better": true
+    }
+  ]
+}

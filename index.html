@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore Formula 1 driver rankings with interactive LineUp multi-attribute visualisation.">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <title>Apex LineUp — F1 Driver Ranking Lab</title>
+  <link rel="stylesheet" href="./styles.css?v=7">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#lineup" data-i18n-aria="brandAria" aria-label="Apex LineUp 排名">
+      <span class="brand-mark"><span>A</span></span>
+      <span><strong>APEX</strong><small>LINEUP / RANKING LAB</small></span>
+    </a>
+    <nav data-i18n-aria="navAria" aria-label="页面导航">
+      <a href="#lineup" data-i18n="navLive">实时排名</a>
+      <a href="#compare" data-i18n="navCompare">方案对比</a>
+      <a href="#method" data-i18n="navMethod">方法</a>
+    </nav>
+    <div class="top-actions"><button class="site-share-button" id="share-site" type="button" data-i18n="shareSite" data-i18n-title="shareSiteAria">Share</button><label class="language-control"><span data-i18n="language">Language</span><select id="language-select" aria-label="Website language" data-i18n-aria="languageAria"><option value="en" selected>English</option><option value="zh">简体中文</option><option value="ja">日本語</option><option value="fr">Français</option><option value="ko">한국어</option><option value="hi">हिन्दी</option></select></label><div class="live-pill"><span></span> F1DB + OPENF1</div></div>
+  </header>
+
+  <main id="top">
+    <section class="workspace-status" data-i18n-aria="summaryAria" aria-label="数据摘要">
+      <div class="workspace-title"><span class="eyebrow">F1 / RANKING ANALYSIS</span><h1 data-i18n="workspaceTitle">车手排名工作台</h1></div>
+      <div class="status-stat"><strong id="driver-count">—</strong><small data-i18n="drivers">车手</small></div>
+      <div class="status-stat"><strong id="race-count">—</strong><small data-i18n="races">大奖赛</small></div>
+      <div class="status-stat"><strong id="metric-count">—</strong><small data-i18n="attributes">属性</small></div>
+      <div class="status-stat"><strong id="coverage-value">—</strong><small data-i18n="coverage">端点覆盖率</small></div>
+      <span id="season-value" class="status-season">—</span>
+    </section>
+    <section class="data-notice" id="data-notice" role="status">
+      <span class="notice-icon">!</span>
+      <div><strong data-i18n="loadingStatus">正在读取数据状态…</strong><p data-i18n="processedOnly">排名仅使用已经过处理的 OpenF1 数据。</p></div>
+      <div class="coverage-bar"><i id="coverage-bar"></i></div>
+    </section>
+
+    <section class="dashboard" id="lineup">
+      <div class="section-heading">
+        <div><p class="eyebrow">01 / LIVE LINEUP</p><h2 data-i18n="liveRankTitle">实时车手排名</h2></div>
+        <div class="season-tools">
+          <div class="season-control">
+            <label for="season-select" data-i18n="season">Season</label>
+            <select id="season-select" data-i18n-aria="selectSeason" aria-label="Select season"></select>
+          </div>
+          <form class="year-range-filter" id="year-range-filter">
+            <span class="range-title" data-i18n="yearRange">Year range</span>
+            <label><span data-i18n="fromYear">From</span><select id="year-from" data-i18n-aria="fromYearAria" aria-label="From year"></select></label>
+            <span class="range-dash" aria-hidden="true">—</span>
+            <label><span data-i18n="toYear">To</span><select id="year-to" data-i18n-aria="toYearAria" aria-label="To year"></select></label>
+            <button type="submit" data-i18n="applyRange">Apply</button>
+            <button type="button" class="range-reset" id="reset-year-range" data-i18n="allYears">All years</button>
+          </form>
+        </div>
+      </div>
+      <p class="season-note" id="season-note" data-i18n="allSeasonNote">全部赛季将同一车手合并；累计指标求和，平均指标按出赛量加权。可切回单个赛季。</p>
+
+      <div class="control-grid">
+        <aside class="panel weights-panel">
+          <div class="panel-head">
+            <div><span class="panel-index">SETUP</span><h3 data-i18n="setupTitle">权重控制台</h3></div>
+            <button class="text-button" id="reset-weights" type="button" data-i18n="reset">重置</button>
+          </div>
+          <div class="preset-row" id="preset-row" data-i18n-aria="presetAria" aria-label="权重预设"></div>
+          <div class="weight-summary">
+            <div class="mini-gauge"><i id="weight-gauge"></i><span id="weight-total">100</span></div>
+            <div><strong data-i18n="activeWeight">启用权重总和</strong><small data-i18n="autoNormalize">系统按有效权重归一化 · 单项 0–100</small></div>
+          </div>
+          <p class="weight-help" id="weight-help" data-i18n="weightHelp">点击属性色块开关；拖动或输入小数权重。</p>
+          <div class="weight-list" id="weight-list"></div>
+        </aside>
+
+        <div class="panel lineup-panel">
+          <div class="panel-head lineup-head">
+            <div><span class="panel-index">GRID</span><h3 data-i18n="lineupTitle">LineUp 排名视图</h3></div>
+            <div class="table-tools">
+              <label class="search-box"><span>⌕</span><input id="driver-search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="搜索车手或车队"></label>
+              <button class="icon-button" id="compact-toggle" type="button" aria-pressed="false" data-i18n-title="compact" data-i18n-aria="compact" title="紧凑模式" aria-label="紧凑模式">≡</button>
+            </div>
+          </div>
+          <div class="viz-toolbar">
+            <div class="view-switch" role="group" data-i18n-aria="viewGroup" aria-label="排名视图">
+              <button id="view-stacked" class="view-tab active" type="button" aria-pressed="true" data-i18n="stackedView">堆叠 LineUp</button>
+              <button id="view-table" class="view-tab" type="button" aria-pressed="false" data-i18n="tableView">属性表格</button>
+            </div>
+            <div class="zoom-tools" data-zoom-controls="lineup"><button type="button" data-zoom="out" data-i18n-aria="zoomOutLive" aria-label="缩小实时排名">−</button><output data-zoom-value>100%</output><button type="button" data-zoom="in" data-i18n-aria="zoomInLive" aria-label="放大实时排名">+</button><button type="button" data-zoom="reset" data-i18n="resetZoom" data-i18n-aria="resetZoomLive" aria-label="重置实时排名缩放">重置</button><button type="button" data-pan-toggle aria-pressed="false" data-i18n="drag">拖动</button></div>
+          </div>
+          <div class="lineup-legend"><span><i class="legend-score"></i><span data-i18n="legendScore">总分 = 彩色属性贡献之和</span></span><span data-i18n="legendInteraction">拖动权重后实时重排；Ctrl + 滚轮缩放</span></div>
+          <div class="lineup-scroll" id="lineup-scroll">
+            <div class="lineup-table" id="lineup-table" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="share-section">
+      <div class="section-heading compact-heading">
+        <div><p class="eyebrow">PIT WALL / SHARE</p><h2 data-i18n="shareTitle">权重码</h2></div>
+        <p data-i18n="shareSubtitle">把你的排名逻辑像赛车设定一样交给队友。</p>
+      </div>
+      <div class="share-grid">
+        <label class="code-field"><span data-i18n="currentCode">当前权重码</span><textarea id="weight-code" rows="3" spellcheck="false" data-i18n-aria="currentCode" aria-label="当前权重码"></textarea></label>
+        <div class="share-actions">
+          <button class="button primary" id="copy-code" type="button" data-i18n="copyCode">复制权重码</button>
+          <button class="button ghost" id="import-code" type="button" data-i18n="importApply">导入并应用</button>
+          <p id="code-message" role="status"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="compare-section" id="compare">
+      <div class="section-heading">
+        <div><p class="eyebrow">02 / SCENARIO COMPARISON</p><h2 data-i18n="compareTitle">多方案排名对比</h2></div>
+        <div class="scenario-adder">
+          <input id="scenario-name" type="text" maxlength="24" data-i18n-placeholder="scenarioPlaceholder" placeholder="方案名称，例如：雨战专家">
+          <button class="button primary" id="save-scenario" type="button" data-i18n="saveScenario">保存当前方案</button>
+        </div>
+      </div>
+      <div class="scenario-list" id="scenario-list"></div>
+      <div class="comparison-panel panel">
+        <div class="comparison-head"><div><h3 data-i18n="parallelTitle">并列 LineUp 排名</h3><p data-i18n="parallelDescription">每列独立排序；彩色堆叠条展示属性贡献；连线追踪同一车手。</p></div><div class="zoom-tools" data-zoom-controls="compare"><button type="button" data-zoom="out" data-i18n-aria="zoomOutCompare" aria-label="缩小方案对比">−</button><output data-zoom-value>100%</output><button type="button" data-zoom="in" data-i18n-aria="zoomInCompare" aria-label="放大方案对比">+</button><button type="button" data-zoom="reset" data-i18n="resetZoom" data-i18n-aria="resetZoomCompare" aria-label="重置方案对比缩放">重置</button><button type="button" data-pan-toggle aria-pressed="false" data-i18n="drag">拖动</button></div></div>
+        <div class="comparison-metric-legend" id="comparison-metric-legend" data-i18n-aria="metricLegend" aria-label="属性颜色图例"></div>
+        <div class="comparison-chart" id="comparison-chart"></div>
+      </div>
+    </section>
+
+    <section class="method-section" id="method">
+      <div class="method-copy"><p class="eyebrow">03 / METHOD</p><h2 data-i18n="methodTitle">排名不是答案，而是一套可解释的判断。</h2></div>
+      <div class="method-steps">
+        <article><span>01</span><h3 data-i18n="methodNormTitle">标准化</h3><p data-i18n="methodNormBody">每项属性按赛季映射到 0–1；“越低越好”的名次指标已自动反向。</p></article>
+        <article><span>02</span><h3 data-i18n="methodWeightedTitle">加权组合</h3><p data-i18n="methodWeightedBody">每位车手的综合得分是可用属性值与用户权重的加权平均，缺失项不会被当成零分。</p></article>
+        <article><span>03</span><h3 data-i18n="methodCompareTitle">排名比较</h3><p data-i18n="methodCompareBody">多个加权排名并列，车手在不同方案间的名次由连接线表示。</p></article>
+      </div>
+    </section>
+  </main>
+
+  <footer><span>APEX LINEUP</span><p data-i18n="footerSource">数据：OpenF1 · 可视化方法参考 LineUp（Gratzl 等，2013）</p><a href="#top" data-i18n="backTop">返回顶部 ↑</a></footer>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="./i18n.js?v=10" defer></script>
+  <script src="./static-data.js?v=10" defer></script>
+  <script src="./app.js?v=10" defer></script>
+</body>
+</html>
