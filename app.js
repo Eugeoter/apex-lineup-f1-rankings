@@ -5,6 +5,8 @@ const METRIC_KEYS = window.APEX_I18N.metricKeys;
 const LANGUAGE_STORAGE_KEY = "apex-lineup-language-v2";
 const WEIGHT_MAX = 100;
 const WEIGHT_STEP = 0.1;
+const INITIAL_RENDER_LIMIT = 100;
+const RENDER_BATCH = 100;
 
 const PRESETS = {
   balanced: {
@@ -40,10 +42,19 @@ const state = {
   scenarios: [],
   compact: false,
   search: "",
+  filters: {team: "all", country: "all", era: "all", achievement: "all", minStarts: 0},
   view: "stacked",
   zoom: {lineup: 1, compare: 1},
   previousRanks: new Map(),
-  expandedDrivers: new Set()
+  expandedDrivers: new Set(),
+  visibleLimit: INITIAL_RENDER_LIMIT,
+  filteredRanked: [],
+  metricHistograms: new Map(),
+  interactiveFrame: 0,
+  filterTimer: 0,
+  comparisonVisible: false,
+  comparisonDirty: true,
+  comparisonTask: 0
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -74,6 +85,7 @@ function applyLanguage(language) {
   if (state.dataset) {
     updateSeasonNote(state.dataset.year);
     renderQuality();
+    populateFilterOptions();
     renderAll();
   }
 }
@@ -146,6 +158,99 @@ function rankDrivers(weights, enabled = state.enabled) {
   }).sort((a, b) => b.score - a.score || (a.championship_position ?? 99) - (b.championship_position ?? 99) || a.full_name.localeCompare(b.full_name));
 }
 
+function normaliseSearchText(value) {
+  return String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function prepareDataset() {
+  state.metricHistograms = new Map();
+  state.dataset.drivers.forEach((driver) => {
+    driver._searchIndex = normaliseSearchText(`${driver.full_name} ${driver.team_name || ""} ${driver.name_acronym || ""} ${driver.country_code || ""}`);
+    if (!Number.isFinite(Number(driver.first_year))) driver.first_year = Number(driver.year) || null;
+    if (!Number.isFinite(Number(driver.last_year))) driver.last_year = Number(driver.year) || null;
+  });
+  state.dataset.metrics.forEach((metric) => {
+    const bins = Array(8).fill(0);
+    state.dataset.drivers.forEach((driver) => {
+      const value = driver.normalised?.[metric.key];
+      if (value !== null && value !== undefined && Number.isFinite(Number(value))) bins[Math.min(7, Math.floor(Number(value) * 8))] += 1;
+    });
+    state.metricHistograms.set(metric.key, bins);
+  });
+}
+
+function resetDriverFilters({render = true} = {}) {
+  state.search = "";
+  state.filters = {team: "all", country: "all", era: "all", achievement: "all", minStarts: 0};
+  state.visibleLimit = INITIAL_RENDER_LIMIT;
+  if ($("#driver-search")) $("#driver-search").value = "";
+  if ($("#team-filter")) $("#team-filter").value = "all";
+  if ($("#country-filter")) $("#country-filter").value = "all";
+  if ($("#era-filter")) $("#era-filter").value = "all";
+  if ($("#achievement-filter")) $("#achievement-filter").value = "all";
+  if ($("#min-starts-filter")) $("#min-starts-filter").value = "0";
+  if (render && state.dataset) {
+    renderLineUp({animate: false});
+    requestComparisonRender();
+  }
+}
+
+function populateFilterOptions({preserve = true} = {}) {
+  if (!state.dataset) return;
+  const selected = preserve ? {...state.filters} : {team: "all", country: "all", era: "all", achievement: "all", minStarts: 0};
+  const teams = [...new Set(state.dataset.drivers.map((driver) => String(driver.team_name || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const countries = [...new Set(state.dataset.drivers.map((driver) => String(driver.country_code || "").trim()).filter(Boolean))].sort((a, b) => countryName(a).localeCompare(countryName(b)));
+  $("#team-filter").innerHTML = `<option value="all">${escapeHTML(t("filterAllTeams"))}</option>${teams.map((team) => `<option value="${escapeHTML(team)}">${escapeHTML(team)}</option>`).join("")}`;
+  $("#country-filter").innerHTML = `<option value="all">${escapeHTML(t("filterAllCountries"))}</option>${countries.map((country) => `<option value="${escapeHTML(country)}">${escapeHTML(countryName(country))}</option>`).join("")}`;
+  $("#era-filter").innerHTML = `<option value="all">${escapeHTML(t("filterAllEras"))}</option><option value="1950">${escapeHTML(t("era1950"))}</option><option value="1980">${escapeHTML(t("era1980"))}</option><option value="2000">${escapeHTML(t("era2000"))}</option><option value="2020">${escapeHTML(t("era2020"))}</option>`;
+  $("#achievement-filter").innerHTML = `<option value="all">${escapeHTML(t("achievementAll"))}</option><option value="winner">${escapeHTML(t("achievementWinner"))}</option><option value="podium">${escapeHTML(t("achievementPodium"))}</option><option value="points">${escapeHTML(t("achievementPoints"))}</option>`;
+  state.filters.team = teams.includes(selected.team) ? selected.team : "all";
+  state.filters.country = countries.includes(selected.country) ? selected.country : "all";
+  state.filters.era = ["all", "1950", "1980", "2000", "2020"].includes(selected.era) ? selected.era : "all";
+  state.filters.achievement = ["all", "winner", "podium", "points"].includes(selected.achievement) ? selected.achievement : "all";
+  state.filters.minStarts = Math.max(0, Math.trunc(Number(selected.minStarts) || 0));
+  $("#team-filter").value = state.filters.team;
+  $("#country-filter").value = state.filters.country;
+  $("#era-filter").value = state.filters.era;
+  $("#achievement-filter").value = state.filters.achievement;
+  $("#min-starts-filter").value = String(state.filters.minStarts);
+}
+
+function driverMatchesFilters(driver) {
+  if (state.search && !driver._searchIndex.includes(normaliseSearchText(state.search))) return false;
+  if (state.filters.team !== "all" && driver.team_name !== state.filters.team) return false;
+  if (state.filters.country !== "all" && driver.country_code !== state.filters.country) return false;
+  if (Number(driver.race_starts || 0) < state.filters.minStarts) return false;
+  if (state.filters.achievement === "winner" && Number(driver.wins || 0) <= 0) return false;
+  if (state.filters.achievement === "podium" && Number(driver.podiums || 0) <= 0) return false;
+  if (state.filters.achievement === "points" && Number(driver.championship_points || 0) <= 0) return false;
+  if (state.filters.era !== "all") {
+    const ranges = {"1950": [1950, 1979], "1980": [1980, 1999], "2000": [2000, 2019], "2020": [2020, 9999]};
+    const [start, end] = ranges[state.filters.era];
+    const first = Number(driver.first_year || driver.year || 0);
+    const last = Number(driver.last_year || driver.year || 0);
+    if (!first || !last || last < start || first > end) return false;
+  }
+  return true;
+}
+
+function filteredRanking(ranking) {
+  return ranking.filter(driverMatchesFilters);
+}
+
+function activeFilterCount() {
+  return Number(Boolean(state.search)) + Number(state.filters.team !== "all") + Number(state.filters.country !== "all") + Number(state.filters.era !== "all") + Number(state.filters.achievement !== "all") + Number(state.filters.minStarts > 0);
+}
+
+function updateFilterStatus(total, shown) {
+  $("#filter-summary").textContent = t("resultsShown", {shown, total});
+  const count = activeFilterCount();
+  const badge = $("#active-filter-count");
+  badge.textContent = String(count);
+  badge.hidden = count === 0;
+  $("#filter-toggle").classList.toggle("active", count > 0);
+}
+
 function displayValue(key, value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
   const numeric = Number(value);
@@ -189,8 +294,7 @@ function driverCell(driver) {
   return `<div class="driver-cell"><button class="driver-expand" type="button" data-expand-driver="${driverKey(driver)}" aria-expanded="${expanded}" aria-label="${escapeHTML(t(expanded ? "collapseDriver" : "expandDriver", {name: driver.full_name}))}"><span aria-hidden="true">▾</span></button>${driverPortrait(driver)}<span class="driver-info"><strong>${link}</strong><small>${escapeHTML(driver.team_name || t("teamFallback"))}</small></span></div>`;
 }
 
-function driverDetail(driver, filtered = "") {
-  const expanded = state.expandedDrivers.has(driverKey(driver));
+function driverDetailContent(driver) {
   const profile = driver.profile || {};
   const bio = String(profile.biography || "").trim();
   const shortBio = bio.length > 400 ? `${bio.slice(0, 397).replace(/\s+\S*$/, "")}…` : bio;
@@ -204,12 +308,16 @@ function driverDetail(driver, filtered = "") {
   const usesWikimedia = profile.portrait_source_name === "Wikimedia" || profile.portrait_source_name === "Generated F1 helmet avatar" && profile.wiki_thumbnail_url;
   const portraitSource = t(usesWikimedia ? "portraitSourceWikimedia" : profile.portrait_source_name === "Generated F1 helmet avatar" ? "portraitSourceGenerated" : "portraitSource");
   const carNumber = driver.driver_number !== null && driver.driver_number !== undefined ? ` / #${escapeHTML(driver.driver_number)}` : "";
-  return `<section class="driver-detail ${expanded ? "is-open" : ""} ${filtered}" data-detail-driver="${driverKey(driver)}" aria-label="${escapeHTML(t("profileHeading"))}">
-    <div class="driver-detail-inner" style="--team:#${escapeHTML((driver.team_colour || "777777").replace("#", ""))}">
+  return `<div class="driver-detail-inner" style="--team:#${escapeHTML((driver.team_colour || "777777").replace("#", ""))}">
       <div class="detail-identity">${driverPortrait(driver, true)}<div><span class="detail-kicker">${escapeHTML(t("profileHeading"))}${carNumber}</span><h4>${escapeHTML(driver.full_name)}</h4><p>${escapeHTML(countryName(driver.country_code))} · ${escapeHTML(driver.team_name || t("teamFallback"))}</p></div></div>
       <div class="detail-copy"><p lang="${bio ? "en" : escapeHTML(state.language)}">${escapeHTML(shortBio || t("profileUnavailable"))}</p>${profileUrl ? `<a href="${escapeHTML(profileUrl)}" target="_blank" rel="noopener noreferrer">${escapeHTML(t("visitProfile"))}</a>` : ""}<small>${bio ? `${escapeHTML(t("profileSource"))} · ` : ""}${escapeHTML(portraitSource)}</small></div>
       <div class="detail-stats">${stats.map(([label, value]) => `<div><strong>${escapeHTML(value ?? "—")}</strong><span>${escapeHTML(t(label))}</span></div>`).join("")}<small>${escapeHTML(t("profileSnapshot", {year: state.dataset.period_label || state.dataset.year}))}</small></div>
-    </div></section>`;
+    </div>`;
+}
+
+function driverDetail(driver) {
+  const expanded = state.expandedDrivers.has(driverKey(driver));
+  return `<section class="driver-detail ${expanded ? "is-open" : ""}" data-detail-driver="${driverKey(driver)}" aria-label="${escapeHTML(t("profileHeading"))}">${expanded ? driverDetailContent(driver) : ""}</section>`;
 }
 
 function attributeContribution(driver, metric, weights) {
@@ -332,7 +440,9 @@ function updateWeight(key, rawValue) {
   if (value === null || !state.dataset.metrics.some((metric) => metric.key === key)) return false;
   state.weights[key] = value;
   state.activePreset = null;
-  renderAll({preserveWeightDOM: true});
+  renderWeightValuesOnly();
+  document.querySelectorAll("[data-preset]").forEach((button) => button.classList.remove("active"));
+  scheduleInteractiveRender();
   return true;
 }
 
@@ -343,71 +453,78 @@ function resetMetric(key) {
   renderAll({preserveWeightDOM: true});
 }
 
-function renderLineUp() {
+function renderLineUp({animate = true} = {}) {
   if (!state.dataset) return;
   const table = $("#lineup-table");
-  const previousPositions = new Map([...table.querySelectorAll(".lineup-row[data-driver]")].map((row) => [row.dataset.driver, row.getBoundingClientRect().top]));
+  const previousPositions = animate ? new Map([...table.querySelectorAll(".lineup-row[data-driver]")].map((row) => [row.dataset.driver, row.getBoundingClientRect().top])) : new Map();
   const previousRanks = state.previousRanks;
   state.ranked = rankDrivers(state.weights);
+  state.filteredRanked = filteredRanking(state.ranked);
+  const visibleDrivers = state.filteredRanked.slice(0, state.visibleLimit);
+  const rankPositions = new Map(state.ranked.map((driver, index) => [driverKey(driver), index + 1]));
   const metrics = state.dataset.metrics;
-  const rowInfo = (driver, index) => {
+  const rowInfo = (driver) => {
+    const rank = rankPositions.get(driverKey(driver));
     const previousRank = previousRanks.get(driverKey(driver));
-    const change = previousRank === undefined ? 0 : previousRank - index - 1;
+    const change = previousRank === undefined ? 0 : previousRank - rank;
     const changeClass = change > 0 ? "rank-up" : change < 0 ? "rank-down" : "";
-    const searchText = `${driver.full_name} ${driver.team_name} ${driver.name_acronym}`.toLowerCase();
-    const filtered = state.search && !searchText.includes(state.search) ? "is-filtered" : "";
     const team = `#${(driver.team_colour || "777777").replace("#", "")}`;
-    return {change, changeClass, filtered, team};
+    return {rank, change, changeClass, team};
   };
+  let header = "";
+  let rows = "";
   if (state.view === "stacked") {
     const totalWeight = Math.max(1, metrics.reduce((sum, metric) => sum + (state.enabled[metric.key] === false ? 0 : Number(state.weights[metric.key] || 0)), 0));
     const histograms = metrics.map((metric, index) => {
       const active = state.enabled[metric.key] !== false;
-      const bins = Array(8).fill(0);
-      state.dataset.drivers.forEach((driver) => {
-        const value = driver.normalised?.[metric.key];
-        if (Number.isFinite(Number(value)) && value !== null) bins[Math.min(7, Math.floor(Number(value) * 8))]++;
-      });
+      const bins = state.metricHistograms.get(metric.key) || Array(8).fill(0);
       const max = Math.max(1, ...bins);
       const spark = bins.map((count) => `<i style="height:${Math.max(8, count / max * 100)}%;--segment:${METRIC_COLORS[index % METRIC_COLORS.length]}"></i>`).join("");
       return `<button class="metric-mini ${active ? "" : "is-disabled"}" type="button" data-toggle-metric="${metric.key}" aria-pressed="${active}" aria-label="${escapeHTML(t(active ? "disableMetric" : "enableMetric", {name: metricName(metric.key)}))}" title="${escapeHTML(metricDescription(metric.key))}"><span><i style="--segment:${METRIC_COLORS[index % METRIC_COLORS.length]}"></i>${escapeHTML(metricName(metric.key))}</span><strong>${active ? `${Math.round((Number(state.weights[metric.key] || 0) / totalWeight) * 100)}%` : escapeHTML(t("metricOff"))}</strong><span class="metric-hist">${spark}</span></button>`;
     }).join("");
-    const header = `<div class="stacked-header"><div class="stacked-title"><span>${escapeHTML(t("rankDriver"))}</span><strong>${escapeHTML(t("combinedScore"))}</strong><span>0 — 100</span></div><div class="metric-mini-row">${histograms}</div></div>`;
-    const rows = state.ranked.map((driver, index) => {
-      const info = rowInfo(driver, index);
-      return `<div class="lineup-row stacked-row ${index < 3 ? "podium-row" : ""} ${info.filtered} ${info.changeClass}" data-driver="${driverKey(driver)}" style="--team:${info.team}"><div class="rank-cell">${String(index + 1).padStart(2, "0")}</div>${driverCell(driver)}<div class="stack-cell">${stackedBar(driver, state.weights, state.enabled)}</div><div class="stack-score"><strong>${(driver.score * 100).toFixed(1)}</strong><small>${info.change > 0 ? `▲${info.change}` : info.change < 0 ? `▼${-info.change}` : " /100"}</small></div></div>${driverDetail(driver, info.filtered)}`;
+    header = `<div class="stacked-header"><div class="stacked-title"><span>${escapeHTML(t("rankDriver"))}</span><strong>${escapeHTML(t("combinedScore"))}</strong><span>0 — 100</span></div><div class="metric-mini-row">${histograms}</div></div>`;
+    rows = visibleDrivers.map((driver) => {
+      const info = rowInfo(driver);
+      return `<div class="lineup-row stacked-row ${info.rank <= 3 ? "podium-row" : ""} ${info.changeClass}" data-driver="${driverKey(driver)}" style="--team:${info.team}"><div class="rank-cell">${String(info.rank).padStart(2, "0")}</div>${driverCell(driver)}<div class="stack-cell">${stackedBar(driver, state.weights, state.enabled)}</div><div class="stack-score"><strong>${(driver.score * 100).toFixed(1)}</strong><small>${info.change > 0 ? `▲${info.change}` : info.change < 0 ? `▼${-info.change}` : " /100"}</small></div></div>${driverDetail(driver)}`;
     }).join("");
-    table.innerHTML = header + rows;
   } else {
     const maxWeight = Math.max(1, ...metrics.map((metric) => state.enabled[metric.key] === false ? 0 : Number(state.weights[metric.key] || 0)));
     const columns = metrics.map((metric) => `${Math.round(92 + 76 * ((state.enabled[metric.key] === false ? 0 : Number(state.weights[metric.key] || 0)) / maxWeight))}px`);
     const template = `52px 196px 132px ${columns.join(" ")}`;
-    const header = `<div class="lineup-row header" style="grid-template-columns:${template}"><div>#</div><div>${escapeHTML(t("driverTeamColumn"))}</div><div>${escapeHTML(t("scoreColumn"))}</div>${metrics.map((metric) => `<div class="${state.enabled[metric.key] === false ? "metric-disabled" : ""}" title="${escapeHTML(metricDescription(metric.key))}">${escapeHTML(metricName(metric.key))} · ${escapeHTML(t("weightPrefix"))}${state.enabled[metric.key] === false ? escapeHTML(t("metricOff")) : formatWeight(state.weights[metric.key] || 0)}</div>`).join("")}</div>`;
-    const rows = state.ranked.map((driver, index) => {
-      const info = rowInfo(driver, index);
-      return `<div class="lineup-row ${index < 3 ? "podium-row" : ""} ${info.filtered} ${info.changeClass}" data-driver="${driverKey(driver)}" style="grid-template-columns:${template};--team:${info.team}"><div class="rank-cell">${String(index + 1).padStart(2, "0")}</div>${driverCell(driver)}<div class="score-cell"><strong>${(driver.score * 100).toFixed(1)}</strong><small>/100</small><span class="score-track"><i style="--score:${(driver.score * 100).toFixed(2)}%"></i></span></div>${metrics.map((metric) => { const normalized = driver.normalised?.[metric.key]; const bar = normalized == null ? 0 : Number(normalized) * 100; const opacity = .2 + .8 * (Number(state.weights[metric.key] || 0) / maxWeight); return `<div class="metric-cell ${state.enabled[metric.key] === false ? "metric-disabled" : ""}" title="${escapeHTML(metricDescription(metric.key))}"><span>${displayValue(metric.key, driver[metric.key])}</span><span class="metric-track"><i style="--bar:${bar.toFixed(2)}%;--opacity:${opacity.toFixed(2)}"></i></span></div>`; }).join("")}</div>${driverDetail(driver, info.filtered)}`;
+    header = `<div class="lineup-row header" style="grid-template-columns:${template}"><div>#</div><div>${escapeHTML(t("driverTeamColumn"))}</div><div>${escapeHTML(t("scoreColumn"))}</div>${metrics.map((metric) => `<div class="${state.enabled[metric.key] === false ? "metric-disabled" : ""}" title="${escapeHTML(metricDescription(metric.key))}">${escapeHTML(metricName(metric.key))} · ${escapeHTML(t("weightPrefix"))}${state.enabled[metric.key] === false ? escapeHTML(t("metricOff")) : formatWeight(state.weights[metric.key] || 0)}</div>`).join("")}</div>`;
+    rows = visibleDrivers.map((driver) => {
+      const info = rowInfo(driver);
+      return `<div class="lineup-row ${info.rank <= 3 ? "podium-row" : ""} ${info.changeClass}" data-driver="${driverKey(driver)}" style="grid-template-columns:${template};--team:${info.team}"><div class="rank-cell">${String(info.rank).padStart(2, "0")}</div>${driverCell(driver)}<div class="score-cell"><strong>${(driver.score * 100).toFixed(1)}</strong><small>/100</small><span class="score-track"><i style="--score:${(driver.score * 100).toFixed(2)}%"></i></span></div>${metrics.map((metric) => { const normalized = driver.normalised?.[metric.key]; const bar = normalized == null ? 0 : Number(normalized) * 100; const opacity = .2 + .8 * (Number(state.weights[metric.key] || 0) / maxWeight); return `<div class="metric-cell ${state.enabled[metric.key] === false ? "metric-disabled" : ""}" title="${escapeHTML(metricDescription(metric.key))}"><span>${displayValue(metric.key, driver[metric.key])}</span><span class="metric-track"><i style="--bar:${bar.toFixed(2)}%;--opacity:${opacity.toFixed(2)}"></i></span></div>`; }).join("")}</div>${driverDetail(driver)}`;
     }).join("");
-    table.innerHTML = header + rows;
   }
+  const remaining = Math.max(0, state.filteredRanked.length - visibleDrivers.length);
+  const loadMore = remaining ? `<div class="lineup-load-more"><span>${escapeHTML(t("resultsShown", {shown: visibleDrivers.length, total: state.filteredRanked.length}))}</span><button type="button" data-load-more>${escapeHTML(t("loadMore", {count: Math.min(RENDER_BATCH, remaining)}))}</button></div>` : `<div class="lineup-load-more complete"><span>${escapeHTML(t("resultsShown", {shown: visibleDrivers.length, total: state.filteredRanked.length}))}</span></div>`;
+  table.innerHTML = header + rows + loadMore;
   table.classList.toggle("stacked-mode", state.view === "stacked");
   table.classList.toggle("compact", state.compact);
   table.style.zoom = String(state.zoom.lineup);
-  state.previousRanks = new Map(state.ranked.map((driver, index) => [driverKey(driver), index + 1]));
+  updateFilterStatus(state.filteredRanked.length, visibleDrivers.length);
+  state.previousRanks = rankPositions;
   if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && previousPositions.size) {
-    table.querySelectorAll(".lineup-row[data-driver]:not(.is-filtered)").forEach((row) => {
+    requestAnimationFrame(() => table.querySelectorAll(".lineup-row[data-driver]").forEach((row) => {
       const before = previousPositions.get(row.dataset.driver);
       if (before === undefined) return;
       const offset = before - row.getBoundingClientRect().top;
       if (Math.abs(offset) > 1 && Math.abs(offset) < 1600) row.animate([{transform: `translateY(${offset}px)`, zIndex: 2}, {transform: "translateY(0)", zIndex: 1}], {duration: 500, easing: "cubic-bezier(.22,.7,.2,1)"});
-    });
+    }));
   }
 }
 
 function frozenScenario(name, weights, colorIndex, enabled = state.enabled, presetKey = null) {
-  return {id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, name, presetKey, weights: {...weights}, enabled: {...enabled}, color: SCENARIO_COLORS[colorIndex % SCENARIO_COLORS.length]};
+  return {id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, name, presetKey, weights: {...weights}, enabled: {...enabled}, color: SCENARIO_COLORS[colorIndex % SCENARIO_COLORS.length], ranking: null};
 }
 
 function scenarioName(scenario) { return scenario.presetKey ? presetLabel(scenario.presetKey) : scenario.name; }
+
+function scenarioRanking(scenario) {
+  if (!scenario.ranking) scenario.ranking = rankDrivers(scenario.weights, scenario.enabled);
+  return scenario.ranking;
+}
 
 function initialiseScenarios() {
   state.scenarios = [
@@ -420,7 +537,7 @@ function initialiseScenarios() {
 function renderScenarios() {
   const list = $("#scenario-list");
   list.innerHTML = state.scenarios.map((scenario, index) => {
-    const top = rankDrivers(scenario.weights, scenario.enabled)[0];
+    const top = scenarioRanking(scenario)[0];
     const name = scenarioName(scenario);
     return `<article class="scenario-card" style="--scenario:${scenario.color}">
       <strong>${escapeHTML(name)}</strong>
@@ -432,7 +549,7 @@ function renderScenarios() {
     button.addEventListener("click", () => {
       state.scenarios = state.scenarios.filter((scenario) => scenario.id !== button.dataset.removeScenario);
       renderScenarios();
-      renderComparison();
+      requestComparisonRender();
     });
   });
 }
@@ -444,6 +561,22 @@ function svgElement(name, attributes = {}, text = null) {
   return element;
 }
 
+function requestComparisonRender({force = false} = {}) {
+  state.comparisonDirty = true;
+  if (!state.comparisonVisible && !force) return;
+  if (state.comparisonTask) {
+    if ("cancelIdleCallback" in window) window.cancelIdleCallback(state.comparisonTask);
+    else clearTimeout(state.comparisonTask);
+  }
+  const run = () => {
+    state.comparisonTask = 0;
+    if (!state.comparisonDirty) return;
+    renderComparison();
+    state.comparisonDirty = false;
+  };
+  state.comparisonTask = "requestIdleCallback" in window ? window.requestIdleCallback(run, {timeout: 350}) : window.setTimeout(run, 30);
+}
+
 function renderComparison() {
   const container = $("#comparison-chart");
   if (!state.dataset || state.scenarios.length < 2) {
@@ -451,28 +584,34 @@ function renderComparison() {
     return;
   }
   $("#comparison-metric-legend").innerHTML = state.dataset.metrics.map((metric, index) => `<span class="metric-legend" title="${escapeHTML(metricDescription(metric.key))}"><i style="--segment:${METRIC_COLORS[index % METRIC_COLORS.length]}"></i>${escapeHTML(metricName(metric.key))}</span>`).join("");
-  const rankings = state.scenarios.map((scenario) => rankDrivers(scenario.weights, scenario.enabled));
+  const rankings = state.scenarios.map(scenarioRanking);
+  const filteredRankings = rankings.map(filteredRanking);
+  if (!filteredRankings[0].length) {
+    container.innerHTML = `<div class="empty-chart">${escapeHTML(t("resultsShown", {shown: 0, total: 0}))}</div>`;
+    return;
+  }
   const columnWidth = 350;
   const gap = 76;
   const headerHeight = 88;
   const rowHeight = state.compact ? 26 : 31;
   const width = state.scenarios.length * columnWidth + (state.scenarios.length - 1) * gap;
-  const height = headerHeight + rowHeight * state.dataset.drivers.length;
-  const columns = rankings.map((ranking, scenarioIndex) => {
+  const height = headerHeight + rowHeight * filteredRankings[0].length;
+  const rankMaps = rankings.map((ranking) => new Map(ranking.map((driver, index) => [driverKey(driver), index])));
+  const columns = filteredRankings.map((ranking, scenarioIndex) => {
     const scenario = state.scenarios[scenarioIndex];
     const name = scenarioName(scenario);
-    const rows = ranking.map((driver, rankIndex) => `<div class="compare-row" data-flow-driver="${driverKey(driver)}" style="--team:#${(driver.team_colour || "777777").replace("#", "")}" title="${escapeHTML(t("comparisonRowTooltip", {name: driver.full_name, rank: rankIndex + 1, score: (driver.score * 100).toFixed(1)}))}"><span class="compare-rank">${rankIndex + 1}</span><span class="compare-driver">${escapeHTML(driver.name_acronym || driver.driver_number)}</span>${stackedBar(driver, scenario.weights, scenario.enabled, {small: true})}<strong>${(driver.score * 100).toFixed(1)}</strong></div>`).join("");
+    const rows = ranking.map((driver) => { const rank = rankMaps[scenarioIndex].get(driverKey(driver)) + 1; return `<div class="compare-row" data-flow-driver="${driverKey(driver)}" style="--team:#${(driver.team_colour || "777777").replace("#", "")}" title="${escapeHTML(t("comparisonRowTooltip", {name: driver.full_name, rank, score: (driver.score * 100).toFixed(1)}))}"><span class="compare-rank">${rank}</span><span class="compare-driver">${escapeHTML(driver.name_acronym || driver.driver_number)}</span>${stackedBar(driver, scenario.weights, scenario.enabled, {small: true})}<strong>${(driver.score * 100).toFixed(1)}</strong></div>`; }).join("");
     return `<section class="comparison-column" style="left:${scenarioIndex * (columnWidth + gap)}px;--scenario:${scenario.color}" aria-label="${escapeHTML(t("comparisonRankAria", {name}))}"><div class="comparison-column-head"><div><span>SETUP ${String(scenarioIndex + 1).padStart(2, "0")}</span><strong>${escapeHTML(name)}</strong></div><small>${escapeHTML(t("scenarioSummary", {driver: ranking[0]?.name_acronym || "—", score: (ranking[0]?.score * 100 || 0).toFixed(1)}))}</small></div>${rows}</section>`;
   }).join("");
-  const rankMaps = rankings.map((ranking) => new Map(ranking.map((driver, index) => [driverKey(driver), index])));
+  const displayMaps = filteredRankings.map((ranking) => new Map(ranking.map((driver, index) => [driverKey(driver), index])));
   const svg = svgElement("svg", {viewBox: `0 0 ${width} ${height}`, width, height, class: "comparison-links", role: "img", "aria-label": t("comparisonFlowAria")});
-  state.dataset.drivers.forEach((driver) => {
+  filteredRankings[0].forEach((driver) => {
     const color = `#${(driver.team_colour || "777777").replace("#", "")}`;
     for (let index = 0; index < state.scenarios.length - 1; index += 1) {
       const start = (index + 1) * columnWidth + index * gap;
       const end = start + gap;
-      const y1 = headerHeight + (rankMaps[index].get(driverKey(driver)) + .5) * rowHeight;
-      const y2 = headerHeight + (rankMaps[index + 1].get(driverKey(driver)) + .5) * rowHeight;
+      const y1 = headerHeight + (displayMaps[index].get(driverKey(driver)) + .5) * rowHeight;
+      const y2 = headerHeight + (displayMaps[index + 1].get(driverKey(driver)) + .5) * rowHeight;
       const path = svgElement("path", {d: `M ${start} ${y1} C ${start + gap * .42} ${y1}, ${end - gap * .42} ${y2}, ${end} ${y2}`, class: "driver-flow", style: `--flow:${color}`, "data-flow-driver": driverKey(driver)});
       svg.appendChild(path);
     }
@@ -482,9 +621,13 @@ function renderComparison() {
   board.appendChild(svg);
   board.insertAdjacentHTML("beforeend", columns);
   board.style.zoom = String(state.zoom.compare);
-  board.querySelectorAll(".compare-row").forEach((row) => {
-    row.addEventListener("mouseenter", () => focusFlow(row.dataset.flowDriver, true));
-    row.addEventListener("mouseleave", () => focusFlow(row.dataset.flowDriver, false));
+  board.addEventListener("mouseover", (event) => {
+    const row = event.target.closest(".compare-row");
+    if (row && !row.contains(event.relatedTarget)) focusFlow(row.dataset.flowDriver, true);
+  });
+  board.addEventListener("mouseout", (event) => {
+    const row = event.target.closest(".compare-row");
+    if (row && !row.contains(event.relatedTarget)) focusFlow(row.dataset.flowDriver, false);
   });
 }
 
@@ -499,6 +642,15 @@ function renderCode() {
   $("#weight-code").value = encodeWeightCode();
 }
 
+function scheduleInteractiveRender() {
+  if (state.interactiveFrame) return;
+  state.interactiveFrame = requestAnimationFrame(() => {
+    state.interactiveFrame = 0;
+    renderLineUp();
+    renderCode();
+  });
+}
+
 function renderAll({preserveWeightDOM = false} = {}) {
   renderPresets();
   if (preserveWeightDOM) renderWeightValuesOnly();
@@ -507,7 +659,7 @@ function renderAll({preserveWeightDOM = false} = {}) {
   renderCode();
   if (!preserveWeightDOM) {
     renderScenarios();
-    renderComparison();
+    requestComparisonRender();
   }
 }
 
@@ -585,8 +737,12 @@ async function loadSeason(year, {resetScenarios = true} = {}) {
   }
   state.expandedDrivers.clear();
   state.previousRanks.clear();
+  state.visibleLimit = INITIAL_RENDER_LIMIT;
+  prepareDataset();
+  populateFilterOptions();
   applyPreset("balanced", {render: false});
   if (resetScenarios) initialiseScenarios();
+  state.comparisonDirty = true;
   const seasonInfo = state.metadata.seasons.find((season) => String(season.year) === String(year));
   $("#driver-count").textContent = state.dataset.drivers.length;
   $("#race-count").textContent = seasonInfo?.grand_prix_count ?? state.dataset.grand_prix_count ?? "—";
@@ -717,14 +873,64 @@ function bindViewport(which) {
   scroll.addEventListener("pointercancel", finishPan);
 }
 
+function applyDriverFiltersFromControls() {
+  state.search = normaliseSearchText($("#driver-search").value.trim());
+  state.filters.team = $("#team-filter").value;
+  state.filters.country = $("#country-filter").value;
+  state.filters.era = $("#era-filter").value;
+  state.filters.achievement = $("#achievement-filter").value;
+  state.filters.minStarts = Math.max(0, Math.trunc(Number($("#min-starts-filter").value) || 0));
+  state.visibleLimit = INITIAL_RENDER_LIMIT;
+  renderLineUp({animate: false});
+  requestComparisonRender();
+}
+
+function scheduleFilterUpdate() {
+  clearTimeout(state.filterTimer);
+  state.filterTimer = window.setTimeout(applyDriverFiltersFromControls, 90);
+}
+
+function loadMoreDrivers() {
+  if (state.visibleLimit >= state.filteredRanked.length) return;
+  state.visibleLimit = Math.min(state.filteredRanked.length, state.visibleLimit + RENDER_BATCH);
+  renderLineUp({animate: false});
+}
+
+function setupComparisonObserver() {
+  const section = $("#compare");
+  if (!("IntersectionObserver" in window)) {
+    state.comparisonVisible = true;
+    requestComparisonRender({force: true});
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    state.comparisonVisible = true;
+    requestComparisonRender({force: true});
+    observer.disconnect();
+  // Keep the expensive multi-column comparison out of the initial render.
+  // A small lead-in still lets it finish just before the user reaches it.
+  }, {rootMargin: "120px 0px"});
+  observer.observe(section);
+}
+
 function bindEvents() {
   $("#language-select").addEventListener("change", (event) => applyLanguage(event.target.value));
   $("#share-site").addEventListener("click", shareSite);
   $("#reset-weights").addEventListener("click", () => applyPreset("balanced"));
   $("#view-stacked").addEventListener("click", () => setView("stacked"));
   $("#view-table").addEventListener("click", () => setView("table"));
+  $("#filter-toggle").addEventListener("click", (event) => {
+    const open = event.currentTarget.getAttribute("aria-expanded") !== "true";
+    event.currentTarget.setAttribute("aria-expanded", String(open));
+    $("#filter-drawer").hidden = !open;
+  });
+  $("#reset-filters").addEventListener("click", () => resetDriverFilters());
+  ["#team-filter", "#country-filter", "#era-filter", "#achievement-filter"].forEach((selector) => $(selector).addEventListener("change", applyDriverFiltersFromControls));
+  $("#min-starts-filter").addEventListener("input", scheduleFilterUpdate);
   bindViewport("lineup");
   bindViewport("compare");
+  setupComparisonObserver();
   $("#weight-list").addEventListener("click", (event) => {
     const toggle = event.target.closest("[data-toggle-metric]");
     if (toggle) toggleMetric(toggle.dataset.toggleMetric);
@@ -743,8 +949,11 @@ function bindEvents() {
       expand.setAttribute("aria-expanded", String(open));
       const driver = state.dataset.drivers.find((item) => driverKey(item) === key);
       expand.setAttribute("aria-label", t(open ? "collapseDriver" : "expandDriver", {name: driver?.full_name || key}));
-      $("#lineup-table").querySelector(`[data-detail-driver="${key}"]`)?.classList.toggle("is-open", open);
+      const detail = $("#lineup-table").querySelector(`[data-detail-driver="${key}"]`);
+      if (detail && open && !detail.firstElementChild && driver) detail.innerHTML = driverDetailContent(driver);
+      detail?.classList.toggle("is-open", open);
     }
+    if (event.target.closest("[data-load-more]")) loadMoreDrivers();
   });
   $("#lineup-table").addEventListener("error", (event) => {
     if (event.target.matches(".driver-portrait img")) event.target.closest(".driver-portrait").classList.add("no-photo");
@@ -766,9 +975,17 @@ function bindEvents() {
     if (number) number.value = formatWeight(state.weights[number.dataset.weightInput] || 0);
   });
   $("#driver-search").addEventListener("input", (event) => {
-    state.search = event.target.value.trim().toLowerCase();
-    renderLineUp();
+    scheduleFilterUpdate();
   });
+  let scrollFrame = 0;
+  $("#lineup-scroll").addEventListener("scroll", (event) => {
+    if (scrollFrame) return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = 0;
+      const viewport = event.currentTarget;
+      if (viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 260) loadMoreDrivers();
+    });
+  }, {passive: true});
   $("#compact-toggle").addEventListener("click", (event) => {
     state.compact = !state.compact;
     event.currentTarget.setAttribute("aria-pressed", String(state.compact));
@@ -789,7 +1006,7 @@ function bindEvents() {
     if (state.scenarios.length > 6) state.scenarios.shift();
     input.value = "";
     renderScenarios();
-    renderComparison();
+    requestComparisonRender();
     showToast(t("savedScenario", {name}));
   });
 }

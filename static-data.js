@@ -90,6 +90,9 @@
     )[0];
     const result = {...latest};
     delete result.normalised;
+    const careerYears = rows.map((row) => Number(row.year)).filter(Number.isFinite);
+    result.first_year = careerYears.length ? Math.min(...careerYears) : null;
+    result.last_year = careerYears.length ? Math.max(...careerYears) : null;
     const additive = [
       "race_entries", "race_starts", "sprint_entries", "sprint_starts", "total_laps",
       "wins", "podiums", "sprint_wins", "sprint_podiums", "dnf_count", "dns_count",
@@ -248,6 +251,8 @@
     const rows = [...grouped.entries()].map(([identity, history]) => {
       const row = history.length > 1 ? mergeDriverHistory(history, selection) : {...history[0]};
       row.driver_id = identity;
+      if (!Number.isFinite(Number(row.first_year))) row.first_year = Number(row.year) || null;
+      if (!Number.isFinite(Number(row.last_year))) row.last_year = Number(row.year) || null;
       return row;
     });
     normaliseLineup(rows, metrics);

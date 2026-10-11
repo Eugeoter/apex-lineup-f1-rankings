@@ -6,7 +6,7 @@
   <meta name="description" content="Explore Formula 1 driver rankings with interactive LineUp multi-attribute visualisation.">
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <title>Apex LineUp — F1 Driver Ranking Lab</title>
-  <link rel="stylesheet" href="./styles.css?v=7">
+  <link rel="stylesheet" href="./styles.css?v=11">
 </head>
 <body>
   <header class="topbar">
@@ -17,7 +17,6 @@
     <nav data-i18n-aria="navAria" aria-label="页面导航">
       <a href="#lineup" data-i18n="navLive">实时排名</a>
       <a href="#compare" data-i18n="navCompare">方案对比</a>
-      <a href="#method" data-i18n="navMethod">方法</a>
     </nav>
     <div class="top-actions"><button class="site-share-button" id="share-site" type="button" data-i18n="shareSite" data-i18n-title="shareSiteAria">Share</button><label class="language-control"><span data-i18n="language">Language</span><select id="language-select" aria-label="Website language" data-i18n-aria="languageAria"><option value="en" selected>English</option><option value="zh">简体中文</option><option value="ja">日本語</option><option value="fr">Français</option><option value="ko">한국어</option><option value="hi">हिन्दी</option></select></label><div class="live-pill"><span></span> F1DB + OPENF1</div></div>
   </header>
@@ -77,8 +76,19 @@
             <div><span class="panel-index">GRID</span><h3 data-i18n="lineupTitle">LineUp 排名视图</h3></div>
             <div class="table-tools">
               <label class="search-box"><span>⌕</span><input id="driver-search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="搜索车手或车队"></label>
+              <button class="filter-button" id="filter-toggle" type="button" aria-expanded="false" aria-controls="filter-drawer" data-i18n-aria="filterPanelAria"><span data-i18n="filters">筛选</span><b id="active-filter-count" hidden>0</b></button>
               <button class="icon-button" id="compact-toggle" type="button" aria-pressed="false" data-i18n-title="compact" data-i18n-aria="compact" title="紧凑模式" aria-label="紧凑模式">≡</button>
             </div>
+          </div>
+          <div class="filter-drawer" id="filter-drawer" hidden>
+            <div class="filter-grid">
+              <label><span data-i18n="filterTeam">车队</span><select id="team-filter"></select></label>
+              <label><span data-i18n="filterCountry">国籍</span><select id="country-filter"></select></label>
+              <label><span data-i18n="filterEra">活跃年代</span><select id="era-filter"></select></label>
+              <label><span data-i18n="filterAchievement">成绩门槛</span><select id="achievement-filter"></select></label>
+              <label><span data-i18n="filterMinStarts">最少大奖赛发车</span><input id="min-starts-filter" type="number" min="0" step="1" inputmode="numeric" value="0"></label>
+            </div>
+            <div class="filter-footer"><output id="filter-summary" aria-live="polite"></output><button class="text-button" id="reset-filters" type="button" data-i18n="clearFilters">清除筛选</button></div>
           </div>
           <div class="viz-toolbar">
             <div class="view-switch" role="group" data-i18n-aria="viewGroup" aria-label="排名视图">
@@ -122,24 +132,15 @@
       <div class="comparison-panel panel">
         <div class="comparison-head"><div><h3 data-i18n="parallelTitle">并列 LineUp 排名</h3><p data-i18n="parallelDescription">每列独立排序；彩色堆叠条展示属性贡献；连线追踪同一车手。</p></div><div class="zoom-tools" data-zoom-controls="compare"><button type="button" data-zoom="out" data-i18n-aria="zoomOutCompare" aria-label="缩小方案对比">−</button><output data-zoom-value>100%</output><button type="button" data-zoom="in" data-i18n-aria="zoomInCompare" aria-label="放大方案对比">+</button><button type="button" data-zoom="reset" data-i18n="resetZoom" data-i18n-aria="resetZoomCompare" aria-label="重置方案对比缩放">重置</button><button type="button" data-pan-toggle aria-pressed="false" data-i18n="drag">拖动</button></div></div>
         <div class="comparison-metric-legend" id="comparison-metric-legend" data-i18n-aria="metricLegend" aria-label="属性颜色图例"></div>
-        <div class="comparison-chart" id="comparison-chart"></div>
-      </div>
-    </section>
-
-    <section class="method-section" id="method">
-      <div class="method-copy"><p class="eyebrow">03 / METHOD</p><h2 data-i18n="methodTitle">排名不是答案，而是一套可解释的判断。</h2></div>
-      <div class="method-steps">
-        <article><span>01</span><h3 data-i18n="methodNormTitle">标准化</h3><p data-i18n="methodNormBody">每项属性按赛季映射到 0–1；“越低越好”的名次指标已自动反向。</p></article>
-        <article><span>02</span><h3 data-i18n="methodWeightedTitle">加权组合</h3><p data-i18n="methodWeightedBody">每位车手的综合得分是可用属性值与用户权重的加权平均，缺失项不会被当成零分。</p></article>
-        <article><span>03</span><h3 data-i18n="methodCompareTitle">排名比较</h3><p data-i18n="methodCompareBody">多个加权排名并列，车手在不同方案间的名次由连接线表示。</p></article>
+        <div class="comparison-chart" id="comparison-chart"><div class="empty-chart" data-i18n="comparisonDeferred">滚动到此处时生成对比图，以加快首屏载入。</div></div>
       </div>
     </section>
   </main>
 
   <footer><span>APEX LINEUP</span><p data-i18n="footerSource">数据：OpenF1 · 可视化方法参考 LineUp（Gratzl 等，2013）</p><a href="#top" data-i18n="backTop">返回顶部 ↑</a></footer>
   <div class="toast" id="toast" role="status"></div>
-  <script src="./i18n.js?v=10" defer></script>
-  <script src="./static-data.js?v=10" defer></script>
-  <script src="./app.js?v=10" defer></script>
+  <script src="./i18n.js?v=11" defer></script>
+  <script src="./static-data.js?v=11" defer></script>
+  <script src="./app.js?v=12" defer></script>
 </body>
 </html>
