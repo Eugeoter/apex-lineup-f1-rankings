@@ -613,7 +613,12 @@ html[lang="ja"], html[lang="ko"], html[lang="zh-CN"] { font-family: "Noto Sans C
 .inverse-picker select { width: 100%; min-width: 0; height: 37px; }
 .inverse-picker .button, .inverse-body > .button { min-height: 37px; }
 .inverse-list { display: grid; gap: 6px; min-height: 42px; padding: 0; margin: 0; list-style: none; }
-.inverse-list li { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 5px 8px; background: #171c22; border: 1px solid #343c46; }
+.inverse-list li { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 5px 8px; background: #171c22; border: 1px solid #343c46; cursor: grab; }
+.inverse-list li:active { cursor: grabbing; }
+.inverse-list li.is-dragging { opacity: .45; }
+.inverse-list li.drop-before { box-shadow: 0 -3px 0 var(--red); }
+.inverse-list li.drop-after { box-shadow: 0 3px 0 var(--red); }
+.inverse-grip { color: #778392; font-size: 14px; letter-spacing: -3px; }
 .inverse-rank { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 auto; background: #de1530; color: #fff; font-size: 11px; font-weight: 900; }
 .inverse-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 800; }
 .inverse-name small { display: block; margin-top: 2px; color: #9ba5b1; font-size: 9px; font-weight: 500; }

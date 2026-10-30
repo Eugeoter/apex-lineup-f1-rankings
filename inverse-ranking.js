@@ -5,6 +5,7 @@ window.APEX_INVERSE = (() => {
   let api;
   let selected = [];
   let solution = null;
+  let draggedIndex = null;
   const $ = (selector) => document.querySelector(selector);
 
   function projectSimplex(values) {
@@ -135,7 +136,7 @@ window.APEX_INVERSE = (() => {
 
   function renderList() {
     const rows = selectedRows();
-    $("#inverse-list").innerHTML = rows.map((row, index) => `<li><span class="inverse-rank">${index + 1}</span><span class="inverse-name">${api.escapeHTML(row.full_name)}<small>${api.escapeHTML(api.t("inverseStarts", {count: row.race_starts || 0}))}</small></span><div class="inverse-actions"><button type="button" data-inverse-action="up" data-index="${index}" ${index === 0 ? "disabled" : ""} aria-label="${api.escapeHTML(api.t("inverseMoveUp", {name: row.full_name}))}">↑</button><button type="button" data-inverse-action="down" data-index="${index}" ${index === rows.length - 1 ? "disabled" : ""} aria-label="${api.escapeHTML(api.t("inverseMoveDown", {name: row.full_name}))}">↓</button><button type="button" data-inverse-action="remove" data-index="${index}" aria-label="${api.escapeHTML(api.t("inverseRemove", {name: row.full_name}))}">×</button></div></li>`).join("");
+    $("#inverse-list").innerHTML = rows.map((row, index) => `<li draggable="true" data-inverse-index="${index}"><span class="inverse-grip" aria-hidden="true">⋮⋮</span><span class="inverse-rank">${index + 1}</span><span class="inverse-name">${api.escapeHTML(row.full_name)}<small>${api.escapeHTML(api.t("inverseStarts", {count: row.race_starts || 0}))}</small></span><div class="inverse-actions"><button type="button" data-inverse-action="up" data-index="${index}" ${index === 0 ? "disabled" : ""} aria-label="${api.escapeHTML(api.t("inverseMoveUp", {name: row.full_name}))}">↑</button><button type="button" data-inverse-action="down" data-index="${index}" ${index === rows.length - 1 ? "disabled" : ""} aria-label="${api.escapeHTML(api.t("inverseMoveDown", {name: row.full_name}))}">↓</button><button type="button" data-inverse-action="remove" data-index="${index}" aria-label="${api.escapeHTML(api.t("inverseRemove", {name: row.full_name}))}">×</button></div></li>`).join("");
   }
 
   function renderResult() {
@@ -165,6 +166,7 @@ window.APEX_INVERSE = (() => {
   function reset() {
     selected = [];
     solution = null;
+    draggedIndex = null;
     $("#inverse-search").value = "";
     closeSuggestions();
     render();
@@ -189,6 +191,24 @@ window.APEX_INVERSE = (() => {
       solution = {success: false, reason: "inverseNoMatch"};
     } else solution = {success: true, weights};
     renderResult();
+  }
+
+  function orderChanged() {
+    solution = null;
+    render();
+    if (selected.length >= 2) solve();
+  }
+
+  function clearDragStyles() {
+    $("#inverse-list").querySelectorAll("li").forEach((row) =>
+      row.classList.remove("is-dragging", "drop-before", "drop-after")
+    );
+  }
+
+  function clearDropStyles() {
+    $("#inverse-list").querySelectorAll("li").forEach((row) =>
+      row.classList.remove("drop-before", "drop-after")
+    );
   }
 
   function init(context) {
@@ -225,10 +245,44 @@ window.APEX_INVERSE = (() => {
       const id = $("#inverse-driver").value;
       if (!id || selected.includes(id) || selected.length >= 10) return;
       selected.push(id);
-      solution = null;
       $("#inverse-search").value = "";
       closeSuggestions();
-      render();
+      orderChanged();
+    });
+    $("#inverse-list").addEventListener("dragstart", (event) => {
+      const row = event.target.closest("li[data-inverse-index]");
+      if (!row) return;
+      draggedIndex = Number(row.dataset.inverseIndex);
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(draggedIndex));
+      row.classList.add("is-dragging");
+    });
+    $("#inverse-list").addEventListener("dragover", (event) => {
+      if (draggedIndex === null) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      clearDropStyles();
+      const row = event.target.closest("li[data-inverse-index]");
+      if (!row) return;
+      row.classList.add(event.clientY > row.getBoundingClientRect().top + row.offsetHeight / 2 ? "drop-after" : "drop-before");
+    });
+    $("#inverse-list").addEventListener("drop", (event) => {
+      if (draggedIndex === null) return;
+      event.preventDefault();
+      const row = event.target.closest("li[data-inverse-index]");
+      const target = row ? Number(row.dataset.inverseIndex) + Number(event.clientY > row.getBoundingClientRect().top + row.offsetHeight / 2) : selected.length;
+      const insertion = target - Number(draggedIndex < target);
+      const from = draggedIndex;
+      draggedIndex = null;
+      clearDragStyles();
+      if (from === insertion) return;
+      const [driver] = selected.splice(from, 1);
+      selected.splice(insertion, 0, driver);
+      orderChanged();
+    });
+    $("#inverse-list").addEventListener("dragend", () => {
+      draggedIndex = null;
+      clearDragStyles();
     });
     $("#inverse-list").addEventListener("click", (event) => {
       const button = event.target.closest("[data-inverse-action]");
@@ -240,8 +294,7 @@ window.APEX_INVERSE = (() => {
         if (other < 0 || other >= selected.length) return;
         [selected[index], selected[other]] = [selected[other], selected[index]];
       }
-      solution = null;
-      render();
+      orderChanged();
     });
     $("#inverse-solve").addEventListener("click", solve);
     $("#inverse-result").addEventListener("click", (event) => {
