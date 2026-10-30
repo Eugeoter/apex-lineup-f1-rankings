@@ -34,10 +34,11 @@ window.APEX_INVERSE = (() => {
     const gaps = rows.slice(0, -1).map((row, index) => keys.map((key) =>
       Number(row.normalised[key]) - Number(rows[index + 1].normalised[key])
     ));
-    const starts = [projectSimplex(initialWeights), Array(keys.length).fill(1 / keys.length)];
+    const uniform = Array(keys.length).fill(1 / keys.length);
+    const starts = [uniform, projectSimplex(initialWeights)];
     keys.forEach((_, index) => starts.push(keys.map((__, j) => Number(index === j))));
     let best = null;
-    let bestMargin = -Infinity;
+    let bestConcentration = Infinity;
     for (const start of starts) {
       let weights = [...start];
       for (let pass = 0; pass < 2500; pass += 1) {
@@ -52,16 +53,31 @@ window.APEX_INVERSE = (() => {
           changed = true;
         }
         const minimum = Math.min(...gaps.map((gap) => gap.reduce((sum, value, index) => sum + value * weights[index], 0)));
-        if (minimum > bestMargin) { best = [...weights]; bestMargin = minimum; }
+        if (minimum > 0) {
+          // Move as far as possible toward equal weights while retaining every pairwise order.
+          // A small remaining margin protects the order after weights are rounded to 0.1%.
+          const floor = Math.min(0.0005, minimum / 2);
+          let blend = 1;
+          for (const gap of gaps) {
+            const current = gap.reduce((sum, value, index) => sum + value * weights[index], 0);
+            const equal = gap.reduce((sum, value, index) => sum + value * uniform[index], 0);
+            if (equal < floor) blend = Math.min(blend, (current - floor) / (current - equal));
+          }
+          blend = Math.max(0, Math.min(1, blend - 0.001));
+          const spread = weights.map((value, index) => (1 - blend) * value + blend * uniform[index]);
+          const rounded = spread.map((value) => Math.round(value * 1000) / 10);
+          const ordered = rows.every((row, index) => index === rows.length - 1 ||
+            score(row, keys, rounded) > score(rows[index + 1], keys, rounded) + 1e-9);
+          if (ordered) {
+            const total = rounded.reduce((sum, value) => sum + value, 0);
+            const concentration = rounded.reduce((sum, value) => sum + (value / total) ** 2, 0);
+            if (concentration < bestConcentration) { best = rounded; bestConcentration = concentration; }
+          }
+        }
         if (minimum >= 0.002 || !changed) break;
       }
-      if (bestMargin >= 0.002) break;
     }
-    if (!best) return null;
-    const rounded = best.map((value) => Math.round(value * 1000) / 10);
-    const ordered = rows.every((row, index) => index === rows.length - 1 ||
-      score(row, keys, rounded) > score(rows[index + 1], keys, rounded) + 1e-9);
-    return ordered ? rounded : null;
+    return best;
   }
 
   function availableDrivers() {
