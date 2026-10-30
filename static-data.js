@@ -9,6 +9,7 @@
     "championship_points",
     "points_per_start",
     "wins",
+    "win_rate",
     "podium_rate",
     "average_finish_position",
     "average_qualifying_position",
@@ -18,7 +19,7 @@
   const DATA_FILES = {
     history: "./data/merged_rankable_driver_seasons.json",
     profiles: "./data/driver_profiles.json",
-    schema: "./data/metric_schema.json",
+    schema: "./data/metric_schema.json?v=2",
     quality: "./data/quality_report.json",
     historicalQuality: "./data/historical_quality_report.json"
   };
@@ -239,6 +240,7 @@
     let metrics = (data.history.metrics || [])
       .filter((metric) => metric.key)
       .map((metric) => ({...metric, label: metric.label || labels.get(metric.key) || metric.key}));
+    metrics.splice(metrics.findIndex((metric) => metric.key === "podium_rate"), 0, {key: "win_rate", label: labels.get("win_rate") || "Grand Prix win rate", higher_is_better: true});
     if (Math.min(...selected) < MODERN_START_YEAR) {
       metrics = metrics.filter((metric) => HISTORICAL_METRIC_KEYS.has(metric.key));
     }
@@ -251,6 +253,7 @@
     const rows = [...grouped.entries()].map(([identity, history]) => {
       const row = history.length > 1 ? mergeDriverHistory(history, selection) : {...history[0]};
       row.driver_id = identity;
+      row.win_rate = Number(row.race_starts) > 0 ? round(Number(row.wins || 0) / Number(row.race_starts), 5) : null;
       if (!Number.isFinite(Number(row.first_year))) row.first_year = Number(row.year) || null;
       if (!Number.isFinite(Number(row.last_year))) row.last_year = Number(row.year) || null;
       return row;

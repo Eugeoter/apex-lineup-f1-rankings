@@ -17,6 +17,11 @@
       "higher_is_better": true
     },
     {
+      "key": "win_rate",
+      "label": "Grand Prix win rate",
+      "higher_is_better": true
+    },
+    {
       "key": "podium_rate",
       "label": "Grand Prix podium rate",
       "higher_is_better": true
