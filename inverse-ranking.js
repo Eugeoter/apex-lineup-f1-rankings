@@ -89,11 +89,37 @@ window.APEX_INVERSE = (() => {
     return selected.map((id) => byId.get(id)).filter(Boolean);
   }
 
-  function renderPicker() {
+  function matchingDrivers() {
     const query = $("#inverse-search").value.trim().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const options = availableDrivers().filter((row) => !selected.includes(api.driverKey(row)) &&
       row.full_name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(query))
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
+    return {query, options};
+  }
+
+  function closeSuggestions() {
+    $("#inverse-suggestions").hidden = true;
+    $("#inverse-search").setAttribute("aria-expanded", "false");
+  }
+
+  function renderSuggestions() {
+    const list = $("#inverse-suggestions");
+    if (list.hidden) return;
+    const {options} = matchingDrivers();
+    list.innerHTML = options.length
+      ? options.slice(0, 12).map((row) => `<button type="button" role="option" data-inverse-suggestion="${api.escapeHTML(api.driverKey(row))}">${api.escapeHTML(row.full_name)}</button>`).join("")
+      : `<p>${api.escapeHTML(api.t("inverseNoResults"))}</p>`;
+  }
+
+  function openSuggestions() {
+    if ($("#inverse-search").disabled) return;
+    $("#inverse-suggestions").hidden = false;
+    $("#inverse-search").setAttribute("aria-expanded", "true");
+    renderSuggestions();
+  }
+
+  function renderPicker() {
+    const {query, options} = matchingDrivers();
     const picker = $("#inverse-driver");
     const previous = picker.value;
     picker.innerHTML = `<option value="">${api.escapeHTML(api.t(options.length ? "inverseSelect" : "inverseNoResults"))}</option>` +
@@ -101,6 +127,7 @@ window.APEX_INVERSE = (() => {
     if (options.some((row) => api.driverKey(row) === previous)) picker.value = previous;
     else if (query && options.length === 1) picker.value = api.driverKey(options[0]);
     $("#inverse-search").disabled = selected.length >= 10;
+    if (selected.length >= 10) closeSuggestions();
     picker.disabled = selected.length >= 10 || !options.length;
     $("#inverse-add").disabled = selected.length >= 10 || !options.length;
     $("#inverse-solve").disabled = selected.length < 2;
@@ -128,6 +155,7 @@ window.APEX_INVERSE = (() => {
   function render() {
     if (!api) return;
     renderPicker();
+    renderSuggestions();
     renderList();
     renderResult();
   }
@@ -138,6 +166,7 @@ window.APEX_INVERSE = (() => {
     selected = [];
     solution = null;
     $("#inverse-search").value = "";
+    closeSuggestions();
     render();
   }
 
@@ -164,13 +193,41 @@ window.APEX_INVERSE = (() => {
 
   function init(context) {
     api = context;
-    $("#inverse-search").addEventListener("input", renderPicker);
+    $("#inverse-search").addEventListener("focus", openSuggestions);
+    $("#inverse-search").addEventListener("click", openSuggestions);
+    $("#inverse-search").addEventListener("input", () => { renderPicker(); openSuggestions(); });
+    $("#inverse-search").addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeSuggestions();
+      if (event.key === "ArrowDown") {
+        openSuggestions();
+        $("#inverse-suggestions button")?.focus();
+        event.preventDefault();
+      }
+      if (event.key === "Enter" && !$("#inverse-suggestions").hidden) {
+        $("#inverse-suggestions button")?.click();
+        event.preventDefault();
+      }
+    });
+    $("#inverse-suggestions").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-inverse-suggestion]");
+      if (!button) return;
+      const row = availableDrivers().find((item) => api.driverKey(item) === button.dataset.inverseSuggestion);
+      if (!row) return;
+      $("#inverse-search").value = row.full_name;
+      renderPicker();
+      $("#inverse-driver").value = api.driverKey(row);
+      closeSuggestions();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!event.target.closest(".inverse-search-wrap")) closeSuggestions();
+    });
     $("#inverse-add").addEventListener("click", () => {
       const id = $("#inverse-driver").value;
       if (!id || selected.includes(id) || selected.length >= 10) return;
       selected.push(id);
       solution = null;
       $("#inverse-search").value = "";
+      closeSuggestions();
       render();
     });
     $("#inverse-list").addEventListener("click", (event) => {
