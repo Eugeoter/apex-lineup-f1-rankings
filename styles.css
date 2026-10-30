@@ -601,8 +601,9 @@ html[lang="ja"], html[lang="ko"], html[lang="zh-CN"] { font-family: "Noto Sans C
 .inverse-section .section-heading > p { max-width: 440px; margin: 0; color: #aab4c0; font-size: 11px; line-height: 1.5; }
 .inverse-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .inverse-body { display: grid; align-content: start; gap: 14px; padding: 17px; }
-.inverse-picker { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center; }
-.inverse-picker label { color: #aab4c0; font-size: 10px; font-weight: 800; }
+.inverse-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; align-items: center; }
+.inverse-picker label { grid-column: 1 / -1; color: #aab4c0; font-size: 10px; font-weight: 800; }
+.inverse-picker input { grid-column: 1 / -1; width: 100%; min-width: 0; height: 37px; }
 .inverse-picker select { width: 100%; min-width: 0; height: 37px; }
 .inverse-picker .button, .inverse-body > .button { min-height: 37px; }
 .inverse-list { display: grid; gap: 6px; min-height: 42px; padding: 0; margin: 0; list-style: none; }

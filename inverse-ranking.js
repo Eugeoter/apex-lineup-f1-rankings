@@ -74,13 +74,18 @@ window.APEX_INVERSE = (() => {
   }
 
   function renderPicker() {
-    const options = availableDrivers().filter((row) => !selected.includes(api.driverKey(row)))
+    const query = $("#inverse-search").value.trim().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const options = availableDrivers().filter((row) => !selected.includes(api.driverKey(row)) &&
+      row.full_name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(query))
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
     const picker = $("#inverse-driver");
     const previous = picker.value;
-    picker.innerHTML = `<option value="">${api.escapeHTML(api.t("inverseSelect"))}</option>` +
+    picker.innerHTML = `<option value="">${api.escapeHTML(api.t(options.length ? "inverseSelect" : "inverseNoResults"))}</option>` +
       options.map((row) => `<option value="${api.escapeHTML(api.driverKey(row))}">${api.escapeHTML(row.full_name)}</option>`).join("");
     if (options.some((row) => api.driverKey(row) === previous)) picker.value = previous;
+    else if (query && options.length === 1) picker.value = api.driverKey(options[0]);
+    $("#inverse-search").disabled = selected.length >= 10;
+    picker.disabled = selected.length >= 10 || !options.length;
     $("#inverse-add").disabled = selected.length >= 10 || !options.length;
     $("#inverse-solve").disabled = selected.length < 2;
   }
@@ -116,6 +121,7 @@ window.APEX_INVERSE = (() => {
   function reset() {
     selected = [];
     solution = null;
+    $("#inverse-search").value = "";
     render();
   }
 
@@ -142,11 +148,13 @@ window.APEX_INVERSE = (() => {
 
   function init(context) {
     api = context;
+    $("#inverse-search").addEventListener("input", renderPicker);
     $("#inverse-add").addEventListener("click", () => {
       const id = $("#inverse-driver").value;
       if (!id || selected.includes(id) || selected.length >= 10) return;
       selected.push(id);
       solution = null;
+      $("#inverse-search").value = "";
       render();
     });
     $("#inverse-list").addEventListener("click", (event) => {
