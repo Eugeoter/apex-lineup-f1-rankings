@@ -10,6 +10,8 @@
     "points_per_start",
     "wins",
     "win_rate",
+    "podiums",
+    "pole_positions",
     "podium_rate",
     "average_finish_position",
     "average_qualifying_position",
@@ -19,7 +21,8 @@
   const DATA_FILES = {
     history: "./data/merged_rankable_driver_seasons.json",
     profiles: "./data/driver_profiles.json",
-    schema: "./data/metric_schema.json?v=2",
+    schema: "./data/metric_schema.json?v=3",
+    poles: "./data/pole_positions.json",
     quality: "./data/quality_report.json",
     historicalQuality: "./data/historical_quality_report.json"
   };
@@ -39,11 +42,13 @@
         readJson(DATA_FILES.profiles),
         readJson(DATA_FILES.schema),
         readJson(DATA_FILES.quality),
-        readJson(DATA_FILES.historicalQuality)
-      ]).then(([history, profiles, schema, quality, historicalQuality]) => ({
+        readJson(DATA_FILES.historicalQuality),
+        readJson(DATA_FILES.poles)
+      ]).then(([history, profiles, schema, quality, historicalQuality, poles]) => ({
         history,
         profiles: profiles?.drivers || {},
         schema: schema?.metrics || [],
+        poles: poles?.poles_by_driver_season || {},
         quality,
         historicalQuality
       }));
@@ -96,7 +101,7 @@
     result.last_year = careerYears.length ? Math.max(...careerYears) : null;
     const additive = [
       "race_entries", "race_starts", "sprint_entries", "sprint_starts", "total_laps",
-      "wins", "podiums", "sprint_wins", "sprint_podiums", "dnf_count", "dns_count",
+      "wins", "podiums", "pole_positions", "sprint_wins", "sprint_podiums", "dnf_count", "dns_count",
       "dsq_count", "overtakes", "overtaken"
     ];
     additive.forEach((field) => {
@@ -235,12 +240,16 @@
     const selected = resolveSelection(selection, years);
     if (!selected.length) throw new Error(`Season dataset not found: ${selection}`);
     const selectedSet = new Set(selected);
-    const sourceRows = (data.history.drivers || []).filter((row) => selectedSet.has(Number(row.year)));
+    const sourceRows = (data.history.drivers || []).filter((row) => selectedSet.has(Number(row.year)))
+      .map((row) => ({...row, pole_positions: data.poles[`${row.driver_id}:${row.year}`] ?? 0}));
     const labels = new Map(data.schema.map((metric) => [metric.key, metric.label]));
     let metrics = (data.history.metrics || [])
       .filter((metric) => metric.key)
       .map((metric) => ({...metric, label: metric.label || labels.get(metric.key) || metric.key}));
-    metrics.splice(metrics.findIndex((metric) => metric.key === "podium_rate"), 0, {key: "win_rate", label: labels.get("win_rate") || "Grand Prix win rate", higher_is_better: true});
+    metrics.splice(metrics.findIndex((metric) => metric.key === "podium_rate"), 0,
+      {key: "win_rate", label: labels.get("win_rate") || "Grand Prix win rate", higher_is_better: true},
+      {key: "podiums", label: labels.get("podiums") || "Grand Prix podiums", higher_is_better: true},
+      {key: "pole_positions", label: labels.get("pole_positions") || "Grand Prix pole positions", higher_is_better: true});
     if (Math.min(...selected) < MODERN_START_YEAR) {
       metrics = metrics.filter((metric) => HISTORICAL_METRIC_KEYS.has(metric.key));
     }
