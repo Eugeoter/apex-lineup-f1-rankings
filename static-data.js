@@ -7,6 +7,7 @@
   const MODERN_START_YEAR = 2023;
   const HISTORICAL_METRIC_KEYS = new Set([
     "championship_points",
+    "race_starts",
     "points_per_start",
     "wins",
     "win_rate",
@@ -21,7 +22,7 @@
   const DATA_FILES = {
     history: "./data/merged_rankable_driver_seasons.json",
     profiles: "./data/driver_profiles.json",
-    schema: "./data/metric_schema.json?v=3",
+    schema: "./data/metric_schema.json?v=4",
     poles: "./data/pole_positions.json",
     quality: "./data/quality_report.json",
     historicalQuality: "./data/historical_quality_report.json"
@@ -246,6 +247,8 @@
     let metrics = (data.history.metrics || [])
       .filter((metric) => metric.key)
       .map((metric) => ({...metric, label: metric.label || labels.get(metric.key) || metric.key}));
+    metrics.splice(metrics.findIndex((metric) => metric.key === "points_per_start"), 0,
+      {key: "race_starts", label: labels.get("race_starts") || "Grand Prix starts", higher_is_better: true});
     metrics.splice(metrics.findIndex((metric) => metric.key === "podium_rate"), 0,
       {key: "win_rate", label: labels.get("win_rate") || "Grand Prix win rate", higher_is_better: true},
       {key: "podiums", label: labels.get("podiums") || "Grand Prix podiums", higher_is_better: true},

@@ -7,6 +7,11 @@
       "higher_is_better": true
     },
     {
+      "key": "race_starts",
+      "label": "Grand Prix starts",
+      "higher_is_better": true
+    },
+    {
       "key": "points_per_start",
       "label": "Points per Grand Prix start",
       "higher_is_better": true

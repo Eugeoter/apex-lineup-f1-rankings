@@ -11,24 +11,24 @@ const RENDER_BATCH = 100;
 const PRESETS = {
   balanced: {
     label: "均衡车手",
-    weights: {championship_points: 14, points_per_start: 8, wins: 5, win_rate: 4, podiums: 2, pole_positions: 2, podium_rate: 7, average_finish_position: 10, average_qualifying_position: 6, average_positions_gained: 8, finish_rate: 8, race_pace_score: 10, lap_consistency_score: 6, overtakes_per_start: 5, net_overtakes_per_start: 5}
+    weights: {championship_points: 13, race_starts: 10, points_per_start: 6, wins: 5, win_rate: 6, podiums: 5, pole_positions: 3, podium_rate: 6, average_finish_position: 8, average_qualifying_position: 6, average_positions_gained: 4, finish_rate: 7, race_pace_score: 7, lap_consistency_score: 6, overtakes_per_start: 4, net_overtakes_per_start: 4}
   },
   pace: {
     label: "纯粹速度",
-    weights: {championship_points: 8, points_per_start: 8, wins: 4, win_rate: 3, podiums: 2, pole_positions: 2, podium_rate: 4, average_finish_position: 10, average_qualifying_position: 16, average_positions_gained: 4, finish_rate: 4, race_pace_score: 24, lap_consistency_score: 8, overtakes_per_start: 2, net_overtakes_per_start: 1}
+    weights: {championship_points: 0, race_starts: 5, points_per_start: 5, wins: 0, win_rate: 3, podiums: 0, pole_positions: 7, podium_rate: 2, average_finish_position: 8, average_qualifying_position: 26, average_positions_gained: 0, finish_rate: 2, race_pace_score: 28, lap_consistency_score: 14, overtakes_per_start: 0, net_overtakes_per_start: 0}
   },
   racecraft: {
     label: "赛道缠斗",
-    weights: {championship_points: 6, points_per_start: 6, wins: 3, win_rate: 2, podiums: 2, pole_positions: 2, podium_rate: 3, average_finish_position: 8, average_qualifying_position: 2, average_positions_gained: 19, finish_rate: 8, race_pace_score: 8, lap_consistency_score: 6, overtakes_per_start: 13, net_overtakes_per_start: 12}
+    weights: {championship_points: 10, race_starts: 10, points_per_start: 5, wins: 5, win_rate: 2, podiums: 6, pole_positions: 2, podium_rate: 3, average_finish_position: 10, average_qualifying_position: 2, average_positions_gained: 13, finish_rate: 8, race_pace_score: 2, lap_consistency_score: 2, overtakes_per_start: 10, net_overtakes_per_start: 10}
   },
   reliability: {
     label: "稳定完赛",
-    weights: {championship_points: 9, points_per_start: 8, wins: 1, win_rate: 2, podiums: 2, pole_positions: 2, podium_rate: 5, average_finish_position: 13, average_qualifying_position: 3, average_positions_gained: 7, finish_rate: 25, race_pace_score: 6, lap_consistency_score: 14, overtakes_per_start: 1, net_overtakes_per_start: 2}
+    weights: {championship_points: 10, race_starts: 10, points_per_start: 8, wins: 3, win_rate: 2, podiums: 6, pole_positions: 1, podium_rate: 7, average_finish_position: 10, average_qualifying_position: 2, average_positions_gained: 3, finish_rate: 25, race_pace_score: 3, lap_consistency_score: 10, overtakes_per_start: 0, net_overtakes_per_start: 0}
   }
 };
 
 const SCENARIO_COLORS = ["#f00827", "#43d5ff", "#c7ff38", "#ffb020", "#ba75ff", "#ff6fb1"];
-const METRIC_COLORS = ["#fa4e55", "#ff8b4d", "#ffc24b", "#fae065", "#d2a7ff", "#ff6c9b", "#a6d665", "#43c4a7", "#49b9dd", "#667fe0", "#a37ce2", "#e783c5", "#d7aa68", "#88bfd0", "#b7c85e"];
+const METRIC_COLORS = ["#fa4e55", "#86d9ff", "#ff8b4d", "#ffc24b", "#fae065", "#d2a7ff", "#ff6c9b", "#a6d665", "#43c4a7", "#49b9dd", "#667fe0", "#a37ce2", "#e783c5", "#d7aa68", "#88bfd0", "#b7c85e"];
 const COUNTRY_REGIONS = {NED: "NL", USA: "US", GBR: "GB", FRA: "FR", MEX: "MX", ESP: "ES", MON: "MC", CAN: "CA", DEN: "DK", JPN: "JP", THA: "TH", CHN: "CN", GER: "DE", FIN: "FI", AUS: "AU"};
 
 const state = {
@@ -314,7 +314,7 @@ function displayValue(key, value) {
   const numeric = Number(value);
   if (["win_rate", "podium_rate", "finish_rate"].includes(key)) return `${(numeric * 100).toFixed(1)}%`;
   if (["race_pace_score", "lap_consistency_score"].includes(key)) return `${(numeric * 100).toFixed(1)}%`;
-  if (["wins", "podiums", "pole_positions", "championship_points"].includes(key)) return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
+  if (["race_starts", "wins", "podiums", "pole_positions", "championship_points"].includes(key)) return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
   return numeric.toFixed(1);
 }
 
