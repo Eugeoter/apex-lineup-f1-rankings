@@ -8,6 +8,7 @@ An interactive Formula 1 driver ranking tool. Explore how the order changes when
 - Use presets or set your own metric weights.
 - Switch between historical championship points and points recalculated under today's Grand Prix scale.
 - Filter by season, year range, team, nationality, era, and minimum starts.
+- Choose and order 2–10 drivers, then find metric weights that reproduce that order when possible.
 - Save up to six ranking setups for side-by-side comparison and share weights with a code.
 - Switch between English, 简体中文, 日本語, Français, 한국어, and हिन्दी.
 

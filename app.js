@@ -90,6 +90,7 @@ function applyLanguage(language) {
     renderQuality();
     populateFilterOptions();
     renderAll();
+    window.APEX_INVERSE.render();
   }
 }
 
@@ -156,6 +157,7 @@ async function setPointsMode(enabled) {
   }
   state.pointsMode = enabled ? "current" : "historical";
   applyPointsMode();
+  window.APEX_INVERSE.invalidate();
   if (state.dataset) {
     state.previousRanks.clear();
     state.comparisonDirty = true;
@@ -792,6 +794,7 @@ async function loadSeason(year, {resetScenarios = true} = {}) {
     state.dataset = await window.APEX_STATIC_DATA.lineup(year);
   }
   state.expandedDrivers.clear();
+  window.APEX_INVERSE.reset();
   state.previousRanks.clear();
   state.visibleLimit = INITIAL_RENDER_LIMIT;
   applyPointsMode();
@@ -973,6 +976,7 @@ function setupComparisonObserver() {
 }
 
 function bindEvents() {
+  window.APEX_INVERSE.init({state, t, escapeHTML, driverKey, rankDrivers, renderAll, metricName});
   $("#language-select").addEventListener("change", (event) => applyLanguage(event.target.value));
   $("#share-site").addEventListener("click", shareSite);
   $("#reset-weights").addEventListener("click", () => applyPreset("balanced"));

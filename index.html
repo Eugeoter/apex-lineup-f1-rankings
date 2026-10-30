@@ -6,7 +6,7 @@
   <meta name="description" content="Explore Formula 1 driver rankings with interactive LineUp multi-attribute visualisation.">
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <title>Apex LineUp — F1 Driver Ranking Lab</title>
-  <link rel="stylesheet" href="./styles.css?v=11">
+  <link rel="stylesheet" href="./styles.css?v=12">
 </head>
 <body>
   <header class="topbar">
@@ -16,6 +16,7 @@
     </a>
     <nav data-i18n-aria="navAria" aria-label="页面导航">
       <a href="#lineup" data-i18n="navLive">实时排名</a>
+      <a href="#inverse" data-i18n="navInverse">反推权重</a>
       <a href="#compare" data-i18n="navCompare">方案对比</a>
     </nav>
     <div class="top-actions"><button class="site-share-button" id="share-site" type="button" data-i18n="shareSite" data-i18n-title="shareSiteAria">Share</button><label class="language-control"><span data-i18n="language">Language</span><select id="language-select" aria-label="Website language" data-i18n-aria="languageAria"><option value="en" selected>English</option><option value="zh">简体中文</option><option value="ja">日本語</option><option value="fr">Français</option><option value="ko">한국어</option><option value="hi">हिन्दी</option></select></label><div class="live-pill"><span></span> F1DB + OPENF1</div></div>
@@ -125,6 +126,16 @@
       </div>
     </section>
 
+    <section class="inverse-section" id="inverse">
+      <div class="section-heading"><div><p class="eyebrow">PIT WALL / REVERSE RANKING</p><h2 data-i18n="inverseTitle">Reverse ranking</h2></div><p data-i18n="inverseIntro">Choose 2–10 drivers, order them, then find weights that reproduce your order.</p></div>
+      <div class="inverse-grid">
+        <div class="panel inverse-input"><div class="panel-head"><div><span class="panel-index">01 / YOUR ORDER</span><h3 data-i18n="inverseChoose">Choose drivers</h3></div></div>
+          <div class="inverse-body"><div class="inverse-picker"><label for="inverse-driver" data-i18n="inverseDriver">Driver</label><select id="inverse-driver"></select><button class="button ghost" id="inverse-add" type="button" data-i18n="inverseAdd">Add</button></div><ol id="inverse-list" class="inverse-list"></ol><p class="inverse-hint" data-i18n="inverseHint">Use arrows to set the desired order. Only metrics available for every selected driver are used.</p><button class="button primary" id="inverse-solve" type="button" data-i18n="inverseSolve">Find weights</button></div>
+        </div>
+        <div class="panel inverse-output"><div class="panel-head"><div><span class="panel-index">02 / MATCHING WEIGHTS</span><h3 data-i18n="inverseResultTitle">Suggested weights</h3></div></div><div class="inverse-body" id="inverse-result" role="status" aria-live="polite"></div></div>
+      </div>
+    </section>
+
     <section class="compare-section" id="compare">
       <div class="section-heading">
         <div><p class="eyebrow">02 / SCENARIO COMPARISON</p><h2 data-i18n="compareTitle">多方案排名对比</h2></div>
@@ -144,8 +155,9 @@
 
   <footer><span>APEX LINEUP</span><p data-i18n="footerSource">数据：OpenF1 · 可视化方法参考 LineUp（Gratzl 等，2013）</p><a href="#top" data-i18n="backTop">返回顶部 ↑</a></footer>
   <div class="toast" id="toast" role="status"></div>
-  <script src="./i18n.js?v=13" defer></script>
+  <script src="./i18n.js?v=14" defer></script>
   <script src="./static-data.js?v=12" defer></script>
-  <script src="./app.js?v=14" defer></script>
+  <script src="./inverse-ranking.js?v=1" defer></script>
+  <script src="./app.js?v=15" defer></script>
 </body>
 </html>
