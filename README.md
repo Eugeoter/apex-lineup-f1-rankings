@@ -6,6 +6,7 @@ An interactive Formula 1 driver ranking tool. Explore how the order changes when
 
 - Rank drivers using 12 adjustable metrics, including wins, podium rate, qualifying position, race pace, and consistency.
 - Use presets or set your own metric weights.
+- Switch between historical championship points and points recalculated under today's Grand Prix scale.
 - Filter by season, year range, team, nationality, era, and minimum starts.
 - Save up to six ranking setups for side-by-side comparison and share weights with a code.
 - Switch between English, 简体中文, 日本語, Français, 한국어, and हिन्दी.
@@ -26,4 +27,7 @@ The bundled data combines historical F1DB records with OpenF1 data for recent se
 
 Data and field definitions are in `data/`, including `metric_schema.json` and the quality reports. F1DB: https://github.com/f1db/f1db · OpenF1: https://openf1.org
 
+The **Current-rules points** switch applies 25–18–15–12–10–8–6–4–2–1 to each eligible Grand Prix result, then updates total points and points per start. Sprint and fastest-lap points are excluded, as are historical shared-car drives. Results after the site's existing race cutoff are ignored. The source is [F1DB v2026.18.0](https://github.com/f1db/f1db/releases/tag/v2026.18.0); `data/current_points.json` is generated from its CSV archive by `scripts/build_current_points.py`. This changes the scoring scale, but does not equalize car performance, reliability, or the number of races.
+
 This project is an exploratory visualization, not an official Formula 1 ranking.
+

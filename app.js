@@ -38,6 +38,8 @@ const state = {
   enabled: {},
   language: LOCALES[localStorage.getItem(LANGUAGE_STORAGE_KEY)] ? localStorage.getItem(LANGUAGE_STORAGE_KEY) : "en",
   activePreset: "balanced",
+  pointsMode: "historical",
+  currentPoints: null,
   ranked: [],
   scenarios: [],
   compact: false,
@@ -76,6 +78,7 @@ function applyLanguage(language) {
   document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => { element.placeholder = t(element.dataset.i18nPlaceholder); });
   document.querySelectorAll("[data-i18n-aria]").forEach((element) => { element.setAttribute("aria-label", t(element.dataset.i18nAria)); });
   document.querySelectorAll("[data-i18n-title]").forEach((element) => { element.title = t(element.dataset.i18nTitle); });
+  $("#points-mode-note").hidden = state.pointsMode !== "current";
   const allOption = $("#season-select option[value='all']");
   if (allOption) allOption.textContent = t("allSeasons");
   const modernOption = $("#season-select option[value='modern']");
@@ -105,6 +108,59 @@ function updateSeasonNote(year) {
   else if (Number(year) < 2023) key = "historicalYearNote";
   note.hidden = !key;
   if (key) note.textContent = t(key);
+}
+
+function rescalePointsMetrics() {
+  for (const key of ["championship_points", "points_per_start"]) {
+    const values = state.dataset.drivers.map((driver) => driver[key]).filter((value) => Number.isFinite(value));
+    const low = Math.min(...values);
+    const high = Math.max(...values);
+    state.dataset.drivers.forEach((driver) => {
+      const value = driver[key];
+      driver.normalised[key] = Number.isFinite(value) ? (low === high ? 1 : (value - low) / (high - low)) : null;
+    });
+  }
+}
+
+function applyPointsMode() {
+  if (!state.dataset) return;
+  const years = state.dataset.years || [];
+  for (const driver of state.dataset.drivers) {
+    driver._historicalPoints ??= {
+      championship_points: driver.championship_points,
+      points_per_start: driver.points_per_start,
+      normalised_points: driver.normalised.championship_points,
+      normalised_per_start: driver.normalised.points_per_start
+    };
+    if (state.pointsMode === "current") {
+      const total = years.reduce((sum, year) => sum + (state.currentPoints.points_by_driver_season[`${driver.driver_id}:${year}`] || 0), 0);
+      driver.championship_points = total;
+      driver.points_per_start = driver.race_starts > 0 ? total / driver.race_starts : null;
+    } else {
+      driver.championship_points = driver._historicalPoints.championship_points;
+      driver.points_per_start = driver._historicalPoints.points_per_start;
+      driver.normalised.championship_points = driver._historicalPoints.normalised_points;
+      driver.normalised.points_per_start = driver._historicalPoints.normalised_per_start;
+    }
+  }
+  if (state.pointsMode === "current") rescalePointsMetrics();
+  $("#points-mode").checked = state.pointsMode === "current";
+  $("#points-mode-note").hidden = state.pointsMode !== "current";
+}
+
+async function setPointsMode(enabled) {
+  if (enabled && !state.currentPoints) {
+    const response = await fetch("./data/current_points.json");
+    if (!response.ok) throw new Error("Current-rules points data is unavailable");
+    state.currentPoints = await response.json();
+  }
+  state.pointsMode = enabled ? "current" : "historical";
+  applyPointsMode();
+  if (state.dataset) {
+    state.previousRanks.clear();
+    state.comparisonDirty = true;
+    renderAll();
+  }
 }
 
 function escapeHTML(value) {
@@ -344,7 +400,7 @@ function stackedBar(driver, weights, enabled = state.enabled, {small = false} = 
 }
 
 function encodeWeightCode() {
-  const payload = JSON.stringify({v: 2, year: state.dataset?.year, weights: state.weights, enabled: Object.keys(state.enabled).filter((key) => state.enabled[key])});
+  const payload = JSON.stringify({v: 2, year: state.dataset?.year, pointsMode: state.pointsMode, weights: state.weights, enabled: Object.keys(state.enabled).filter((key) => state.enabled[key])});
   const bytes = new TextEncoder().encode(payload);
   let binary = "";
   bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
@@ -738,6 +794,7 @@ async function loadSeason(year, {resetScenarios = true} = {}) {
   state.expandedDrivers.clear();
   state.previousRanks.clear();
   state.visibleLimit = INITIAL_RENDER_LIMIT;
+  applyPointsMode();
   prepareDataset();
   populateFilterOptions();
   applyPreset("balanced", {render: false});
@@ -763,6 +820,7 @@ async function importCode() {
       if (!option && !range) throw new Error(t("importNoSeason", {year: payload.year}));
       await loadSeason(payload.year);
     }
+    await setPointsMode(payload.pointsMode === "current");
     const validKeys = new Set(state.dataset.metrics.map((metric) => metric.key));
     const imported = {};
     Object.entries(payload.weights).forEach(([key, value]) => {
@@ -994,6 +1052,12 @@ function bindEvents() {
   $("#copy-code").addEventListener("click", copyCode);
   $("#import-code").addEventListener("click", importCode);
   $("#season-select").addEventListener("change", (event) => loadSeason(event.target.value));
+  $("#points-mode").addEventListener("change", async (event) => {
+    event.target.disabled = true;
+    try { await setPointsMode(event.target.checked); }
+    catch (error) { event.target.checked = state.pointsMode === "current"; showToast(error.message); }
+    finally { event.target.disabled = false; }
+  });
   $("#year-range-filter").addEventListener("submit", (event) => {
     event.preventDefault();
     applyYearRange();
@@ -1041,3 +1105,4 @@ async function initialise() {
 }
 
 initialise();
+
