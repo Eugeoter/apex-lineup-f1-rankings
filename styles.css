@@ -629,15 +629,18 @@ html[lang="ja"], html[lang="ko"], html[lang="zh-CN"] { font-family: "Noto Sans C
 .inverse-hint, .inverse-empty { margin: 0; color: #aab4c0; font-size: 10px; line-height: 1.5; }
 .inverse-success { margin: 0; color: #c6efce; font-size: 12px; font-weight: 800; }
 .inverse-weight-list { display: grid; gap: 8px; }
-.inverse-weight-row { display: grid; grid-template-columns: minmax(110px, 1fr) 52px; gap: 5px 10px; padding: 8px 10px; border: 1px solid #303842; background: #171c22; font-size: 10px; }
-.inverse-weight-row label { font-weight: 800; }
-.inverse-weight-row strong { text-align: right; font-variant-numeric: tabular-nums; }
-.inverse-feasible-track { position: relative; grid-column: 1 / -1; height: 7px; overflow: visible; background: #303842; }
-.inverse-feasible-track i { position: absolute; left: var(--low); width: var(--width); height: 100%; background: #e3475a; }
-.inverse-feasible-track b { position: absolute; left: var(--current); top: -3px; width: 3px; height: 13px; transform: translateX(-50%); background: #fff; }
-.inverse-weight-row input[type="range"] { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: var(--red); cursor: pointer; }
-.inverse-weight-row input[type="range"]:disabled { opacity: .5; cursor: default; }
-.inverse-weight-range { grid-column: 1 / -1; color: #aab4c0; font-variant-numeric: tabular-nums; }
+.inverse-weight-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; min-height: 91px; padding: 9px 11px; border: 1px solid #303842; border-left: 3px solid var(--segment); background: #171c22; font-size: 10px; }
+.inverse-vertical-control { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: #919ba7; font-size: 8px; font-variant-numeric: tabular-nums; }
+.inverse-vertical-control input[type="range"] { width: 20px; height: 56px; margin: 0; writing-mode: vertical-lr; direction: rtl; accent-color: var(--segment); cursor: pointer; }
+.inverse-vertical-control input[type="range"]:disabled { opacity: .5; cursor: default; }
+.inverse-weight-detail { display: flex; min-width: 0; flex-direction: column; justify-content: center; gap: 9px; }
+.inverse-weight-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.inverse-weight-heading label { min-width: 0; font-weight: 800; }
+.inverse-weight-heading strong { color: var(--segment); text-align: right; font-variant-numeric: tabular-nums; }
+.inverse-feasible-track { position: relative; height: 9px; background: #303842; }
+.inverse-feasible-track i { position: absolute; left: var(--low); width: var(--width); height: 100%; background: var(--segment); }
+.inverse-feasible-track b { position: absolute; left: var(--current); top: -3px; width: 3px; height: 15px; transform: translateX(-50%); background: #fff; }
+.inverse-weight-range { color: #aab4c0; font-variant-numeric: tabular-nums; }
 @media (max-width: 720px) { .inverse-grid { grid-template-columns: 1fr; } .inverse-section { padding: 20px 10px; } }
 
 /* Matched dashboard panels, advanced filtering, and progressive rendering. */

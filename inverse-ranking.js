@@ -202,7 +202,7 @@ window.APEX_INVERSE = (() => {
       target.innerHTML = `<p class="inverse-empty">${api.escapeHTML(api.t(solution.reason))}</p>`;
       return;
     }
-    target.innerHTML = `<p class="inverse-success">${api.escapeHTML(api.t("inverseMatched"))}</p><p class="inverse-hint">${api.escapeHTML(api.t("inverseExploreHint"))}</p><div class="inverse-weight-list">${solution.keys.map((key) => `<div class="inverse-weight-row" data-inverse-key="${api.escapeHTML(key)}"><label for="inverse-weight-${api.escapeHTML(key)}">${api.escapeHTML(api.metricName(key))}</label><strong class="inverse-weight-value"></strong><div class="inverse-feasible-track" aria-hidden="true"><i></i><b></b></div><input id="inverse-weight-${api.escapeHTML(key)}" type="range" step="0.1" data-inverse-weight="${api.escapeHTML(key)}" aria-label="${api.escapeHTML(api.t("inverseWeightAria", {name: api.metricName(key)}))}"><small class="inverse-weight-range"></small></div>`).join("")}</div><p class="inverse-hint">${api.escapeHTML(api.t("inverseNotUnique"))}</p><button class="button primary" id="inverse-apply" type="button">${api.escapeHTML(api.t("inverseApply"))}</button>`;
+    target.innerHTML = `<p class="inverse-success">${api.escapeHTML(api.t("inverseMatched"))}</p><p class="inverse-hint">${api.escapeHTML(api.t("inverseExploreHint"))}</p><div class="inverse-weight-list">${solution.keys.map((key) => `<div class="inverse-weight-row" data-inverse-key="${api.escapeHTML(key)}" style="--segment:${api.metricColor(key)}"><div class="inverse-vertical-control"><span class="inverse-slider-max"></span><input id="inverse-weight-${api.escapeHTML(key)}" type="range" step="0.1" data-inverse-weight="${api.escapeHTML(key)}" aria-label="${api.escapeHTML(api.t("inverseWeightAria", {name: api.metricName(key)}))}"><span class="inverse-slider-min"></span></div><div class="inverse-weight-detail"><div class="inverse-weight-heading"><label for="inverse-weight-${api.escapeHTML(key)}">${api.escapeHTML(api.metricName(key))}</label><strong class="inverse-weight-value"></strong></div><div class="inverse-feasible-track" aria-hidden="true"><i></i><b></b></div><small class="inverse-weight-range"></small></div></div>`).join("")}</div><p class="inverse-hint">${api.escapeHTML(api.t("inverseNotUnique"))}</p><button class="button primary" id="inverse-apply" type="button">${api.escapeHTML(api.t("inverseApply"))}</button>`;
     refreshWeightControls();
   }
 
@@ -219,6 +219,8 @@ window.APEX_INVERSE = (() => {
       slider.max = String(max);
       slider.value = String(weights[index]);
       slider.disabled = min === max;
+      row.querySelector(".inverse-slider-max").textContent = max.toFixed(1);
+      row.querySelector(".inverse-slider-min").textContent = min.toFixed(1);
       row.querySelector(".inverse-weight-value").textContent = `${weights[index].toFixed(1)}%`;
       row.querySelector(".inverse-weight-range").textContent = api.t("inverseFeasibleRange", {min: min.toFixed(1), max: max.toFixed(1)});
       const track = row.querySelector(".inverse-feasible-track");

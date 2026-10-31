@@ -976,7 +976,8 @@ function setupComparisonObserver() {
 }
 
 function bindEvents() {
-  window.APEX_INVERSE.init({state, t, escapeHTML, driverKey, rankDrivers, renderAll, metricName});
+  window.APEX_INVERSE.init({state, t, escapeHTML, driverKey, rankDrivers, renderAll, metricName,
+    metricColor: (key) => METRIC_COLORS[state.dataset.metrics.findIndex((metric) => metric.key === key) % METRIC_COLORS.length]});
   $("#language-select").addEventListener("change", (event) => applyLanguage(event.target.value));
   $("#share-site").addEventListener("click", shareSite);
   $("#reset-weights").addEventListener("click", () => applyPreset("balanced"));
