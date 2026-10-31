@@ -31,6 +31,60 @@ window.APEX_INVERSE = (() => {
     return total ? weighted / total : 0;
   }
 
+  function keepsOrder(rows, keys, weights) {
+    return rows.every((row, index) => index === rows.length - 1 ||
+      score(row, keys, weights) > score(rows[index + 1], keys, weights) + 1e-9);
+  }
+
+  // Vary one coordinate while preserving the proportions of every other weight.
+  // The selected drivers share all these metrics, so their score gaps are linear on this slice.
+  function rebalanced(weights, index, value) {
+    if (weights.length === 1) return [100];
+    const chosenTicks = Math.round(value * 10);
+    const remainingTicks = 1000 - chosenTicks;
+    const otherTotal = weights.reduce((sum, weight, position) => sum + (position === index ? 0 : weight), 0);
+    const shares = weights.map((weight, position) => position === index ? null :
+      otherTotal > 1e-10 ? weight / otherTotal : 1 / (weights.length - 1));
+    const ticks = shares.map((share) => share === null ? chosenTicks : Math.floor(share * remainingTicks));
+    let unassigned = 1000 - ticks.reduce((sum, tick) => sum + tick, 0);
+    const order = shares.map((share, position) => ({position, fraction: share === null ? -1 : share * remainingTicks - ticks[position]}))
+      .sort((a, b) => b.fraction - a.fraction || a.position - b.position);
+    for (let i = 0; i < unassigned; i += 1) ticks[order[i].position] += 1;
+    return ticks.map((tick) => tick / 10);
+  }
+
+  function feasibleRange(rows, keys, weights, index) {
+    if (keys.length === 1) return [100, 100];
+    const otherTotal = weights.reduce((sum, weight, position) => sum + (position === index ? 0 : weight), 0);
+    let lower = 0;
+    let upper = 100;
+    const margin = 1e-7;
+    for (let rowIndex = 0; rowIndex < rows.length - 1; rowIndex += 1) {
+      const gaps = keys.map((key) => Number(rows[rowIndex].normalised[key]) - Number(rows[rowIndex + 1].normalised[key]));
+      const other = otherTotal > 1e-10
+        ? gaps.reduce((sum, gap, position) => sum + (position === index ? 0 : gap * weights[position]), 0) / otherTotal
+        : gaps.reduce((sum, gap, position) => sum + (position === index ? 0 : gap), 0) / (keys.length - 1);
+      const slope = gaps[index] - other;
+      if (slope > 1e-12) lower = Math.max(lower, (margin - 100 * other) / slope);
+      else if (slope < -1e-12) upper = Math.min(upper, (margin - 100 * other) / slope);
+      else if (100 * other <= margin) return [weights[index], weights[index]];
+    }
+    const minimumTick = lower <= 0 ? 0 : Math.ceil((lower + 1e-9) * 10);
+    const maximumTick = upper >= 100 ? 1000 : Math.floor((upper - 1e-9) * 10);
+    const currentTick = Math.round(weights[index] * 10);
+    let minTick = currentTick;
+    let maxTick = currentTick;
+    for (let tick = currentTick - 1; tick >= minimumTick; tick -= 1) {
+      if (!keepsOrder(rows, keys, rebalanced(weights, index, tick / 10))) break;
+      minTick = tick;
+    }
+    for (let tick = currentTick + 1; tick <= maximumTick; tick += 1) {
+      if (!keepsOrder(rows, keys, rebalanced(weights, index, tick / 10))) break;
+      maxTick = tick;
+    }
+    return [minTick / 10, maxTick / 10];
+  }
+
   function solveOrder(rows, keys, initialWeights) {
     const gaps = rows.slice(0, -1).map((row, index) => keys.map((key) =>
       Number(row.normalised[key]) - Number(rows[index + 1].normalised[key])
@@ -67,8 +121,7 @@ window.APEX_INVERSE = (() => {
           blend = Math.max(0, Math.min(1, blend - 0.001));
           const spread = weights.map((value, index) => (1 - blend) * value + blend * uniform[index]);
           const rounded = spread.map((value) => Math.round(value * 1000) / 10);
-          const ordered = rows.every((row, index) => index === rows.length - 1 ||
-            score(row, keys, rounded) > score(rows[index + 1], keys, rounded) + 1e-9);
+          const ordered = keepsOrder(rows, keys, rounded);
           if (ordered) {
             const total = rounded.reduce((sum, value) => sum + value, 0);
             const concentration = rounded.reduce((sum, value) => sum + (value / total) ** 2, 0);
@@ -149,8 +202,30 @@ window.APEX_INVERSE = (() => {
       target.innerHTML = `<p class="inverse-empty">${api.escapeHTML(api.t(solution.reason))}</p>`;
       return;
     }
-    const weights = Object.entries(solution.weights).filter(([, weight]) => weight > 0).sort((a, b) => b[1] - a[1]);
-    target.innerHTML = `<p class="inverse-success">${api.escapeHTML(api.t("inverseMatched"))}</p><div class="inverse-weight-list">${weights.map(([key, weight]) => `<div><span>${api.escapeHTML(api.metricName(key))}</span><i><b style="width:${weight}%"></b></i><strong>${weight.toFixed(1)}%</strong></div>`).join("")}</div><p class="inverse-hint">${api.escapeHTML(api.t("inverseNotUnique"))}</p><button class="button primary" id="inverse-apply" type="button">${api.escapeHTML(api.t("inverseApply"))}</button>`;
+    target.innerHTML = `<p class="inverse-success">${api.escapeHTML(api.t("inverseMatched"))}</p><p class="inverse-hint">${api.escapeHTML(api.t("inverseExploreHint"))}</p><div class="inverse-weight-list">${solution.keys.map((key) => `<div class="inverse-weight-row" data-inverse-key="${api.escapeHTML(key)}"><label for="inverse-weight-${api.escapeHTML(key)}">${api.escapeHTML(api.metricName(key))}</label><strong class="inverse-weight-value"></strong><div class="inverse-feasible-track" aria-hidden="true"><i></i><b></b></div><input id="inverse-weight-${api.escapeHTML(key)}" type="range" step="0.1" data-inverse-weight="${api.escapeHTML(key)}" aria-label="${api.escapeHTML(api.t("inverseWeightAria", {name: api.metricName(key)}))}"><small class="inverse-weight-range"></small></div>`).join("")}</div><p class="inverse-hint">${api.escapeHTML(api.t("inverseNotUnique"))}</p><button class="button primary" id="inverse-apply" type="button">${api.escapeHTML(api.t("inverseApply"))}</button>`;
+    refreshWeightControls();
+  }
+
+  function refreshWeightControls() {
+    if (!solution?.success) return;
+    const weights = solution.keys.map((key) => solution.weights[key]);
+    const controls = new Map([...$("#inverse-result").querySelectorAll(".inverse-weight-row")].map((row) => [row.dataset.inverseKey, row]));
+    solution.keys.forEach((key, index) => {
+      const row = controls.get(key);
+      if (!row) return;
+      const [min, max] = feasibleRange(solution.rows, solution.keys, weights, index);
+      const slider = row.querySelector("input");
+      slider.min = String(min);
+      slider.max = String(max);
+      slider.value = String(weights[index]);
+      slider.disabled = min === max;
+      row.querySelector(".inverse-weight-value").textContent = `${weights[index].toFixed(1)}%`;
+      row.querySelector(".inverse-weight-range").textContent = api.t("inverseFeasibleRange", {min: min.toFixed(1), max: max.toFixed(1)});
+      const track = row.querySelector(".inverse-feasible-track");
+      track.style.setProperty("--low", `${min}%`);
+      track.style.setProperty("--width", `${Math.max(0, max - min)}%`);
+      track.style.setProperty("--current", `${weights[index]}%`);
+    });
   }
 
   function render() {
@@ -184,12 +259,16 @@ window.APEX_INVERSE = (() => {
     const found = solveOrder(rows, keys, initial);
     if (!found) { solution = {success: false, reason: "inverseNoMatch"}; renderResult(); return; }
     const weights = Object.fromEntries(api.state.dataset.metrics.map((metric) => [metric.key, 0]));
-    keys.forEach((key, index) => { weights[key] = found[index]; });
+    const exact = found.map((weight) => weight * 100 / found.reduce((sum, value) => sum + value, 0));
+    const quantized = keys.map((_, index) => rebalanced(exact, index, Math.round(exact[index] * 10) / 10))
+      .find((candidate) => keepsOrder(rows, keys, candidate));
+    if (!quantized) { solution = {success: false, reason: "inverseNoMatch"}; renderResult(); return; }
+    keys.forEach((key, index) => { weights[key] = quantized[index]; });
     const ranked = api.rankDrivers(weights, Object.fromEntries(api.state.dataset.metrics.map((metric) => [metric.key, true])));
     const places = new Map(ranked.map((row, index) => [api.driverKey(row), index]));
     if (!selected.every((id, index) => index === selected.length - 1 || places.get(id) < places.get(selected[index + 1]))) {
       solution = {success: false, reason: "inverseNoMatch"};
-    } else solution = {success: true, weights};
+    } else solution = {success: true, weights, keys, rows};
     renderResult();
   }
 
@@ -297,6 +376,17 @@ window.APEX_INVERSE = (() => {
       orderChanged();
     });
     $("#inverse-solve").addEventListener("click", solve);
+    $("#inverse-result").addEventListener("input", (event) => {
+      const slider = event.target.closest("[data-inverse-weight]");
+      if (!slider || !solution?.success) return;
+      const index = solution.keys.indexOf(slider.dataset.inverseWeight);
+      if (index < 0) return;
+      const current = solution.keys.map((key) => solution.weights[key]);
+      const next = rebalanced(current, index, Number(slider.value));
+      if (!keepsOrder(solution.rows, solution.keys, next)) { slider.value = String(current[index]); return; }
+      solution.keys.forEach((key, position) => { solution.weights[key] = next[position]; });
+      refreshWeightControls();
+    });
     $("#inverse-result").addEventListener("click", (event) => {
       if (!event.target.closest("#inverse-apply") || !solution?.success) return;
       api.state.weights = {...solution.weights};
@@ -308,5 +398,5 @@ window.APEX_INVERSE = (() => {
     render();
   }
 
-  return {init, render, reset, invalidate, solveOrder};
+  return {init, render, reset, invalidate, solveOrder, rebalanced, feasibleRange};
 })();
