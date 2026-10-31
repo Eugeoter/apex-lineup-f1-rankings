@@ -7,6 +7,11 @@
       "higher_is_better": true
     },
     {
+      "key": "race_starts",
+      "label": "Grand Prix starts",
+      "higher_is_better": true
+    },
+    {
       "key": "points_per_start",
       "label": "Points per Grand Prix start",
       "higher_is_better": true
@@ -14,6 +19,21 @@
     {
       "key": "wins",
       "label": "Grand Prix wins",
+      "higher_is_better": true
+    },
+    {
+      "key": "win_rate",
+      "label": "Grand Prix win rate",
+      "higher_is_better": true
+    },
+    {
+      "key": "podiums",
+      "label": "Grand Prix podiums",
+      "higher_is_better": true
+    },
+    {
+      "key": "pole_positions",
+      "label": "Grand Prix pole positions",
       "higher_is_better": true
     },
     {
@@ -59,6 +79,11 @@
     {
       "key": "net_overtakes_per_start",
       "label": "Net overtakes per competitive start",
+      "higher_is_better": true
+    },
+    {
+      "key": "team_points_share",
+      "label": "Share of constructor points in comparable GP starts",
       "higher_is_better": true
     }
   ]

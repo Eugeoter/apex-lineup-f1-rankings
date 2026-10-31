@@ -11,24 +11,24 @@ const RENDER_BATCH = 100;
 const PRESETS = {
   balanced: {
     label: "均衡车手",
-    weights: {championship_points: 14, points_per_start: 8, wins: 8, podium_rate: 10, average_finish_position: 10, average_qualifying_position: 8, average_positions_gained: 8, finish_rate: 8, race_pace_score: 10, lap_consistency_score: 6, overtakes_per_start: 5, net_overtakes_per_start: 5}
+    weights: {championship_points: 10, race_starts: 10, points_per_start: 4, wins: 5, win_rate: 6, podiums: 5, pole_positions: 3, podium_rate: 6, average_finish_position: 8, average_qualifying_position: 6, average_positions_gained: 4, finish_rate: 7, race_pace_score: 7, lap_consistency_score: 6, overtakes_per_start: 4, net_overtakes_per_start: 4, team_points_share: 5}
   },
   pace: {
     label: "纯粹速度",
-    weights: {championship_points: 8, points_per_start: 8, wins: 7, podium_rate: 6, average_finish_position: 10, average_qualifying_position: 18, average_positions_gained: 4, finish_rate: 4, race_pace_score: 24, lap_consistency_score: 8, overtakes_per_start: 2, net_overtakes_per_start: 1}
+    weights: {championship_points: 0, race_starts: 5, points_per_start: 5, wins: 0, win_rate: 3, podiums: 0, pole_positions: 7, podium_rate: 2, average_finish_position: 8, average_qualifying_position: 26, average_positions_gained: 0, finish_rate: 2, race_pace_score: 28, lap_consistency_score: 14, overtakes_per_start: 0, net_overtakes_per_start: 0, team_points_share: 0}
   },
   racecraft: {
     label: "赛道缠斗",
-    weights: {championship_points: 7, points_per_start: 7, wins: 5, podium_rate: 5, average_finish_position: 8, average_qualifying_position: 2, average_positions_gained: 19, finish_rate: 8, race_pace_score: 8, lap_consistency_score: 6, overtakes_per_start: 13, net_overtakes_per_start: 12}
+    weights: {championship_points: 8, race_starts: 10, points_per_start: 4, wins: 5, win_rate: 2, podiums: 6, pole_positions: 2, podium_rate: 3, average_finish_position: 10, average_qualifying_position: 2, average_positions_gained: 13, finish_rate: 8, race_pace_score: 2, lap_consistency_score: 2, overtakes_per_start: 10, net_overtakes_per_start: 10, team_points_share: 3}
   },
   reliability: {
     label: "稳定完赛",
-    weights: {championship_points: 9, points_per_start: 8, wins: 3, podium_rate: 7, average_finish_position: 13, average_qualifying_position: 5, average_positions_gained: 7, finish_rate: 25, race_pace_score: 6, lap_consistency_score: 14, overtakes_per_start: 1, net_overtakes_per_start: 2}
+    weights: {championship_points: 10, race_starts: 10, points_per_start: 8, wins: 3, win_rate: 2, podiums: 6, pole_positions: 1, podium_rate: 7, average_finish_position: 10, average_qualifying_position: 2, average_positions_gained: 3, finish_rate: 25, race_pace_score: 3, lap_consistency_score: 10, overtakes_per_start: 0, net_overtakes_per_start: 0, team_points_share: 0}
   }
 };
 
 const SCENARIO_COLORS = ["#f00827", "#43d5ff", "#c7ff38", "#ffb020", "#ba75ff", "#ff6fb1"];
-const METRIC_COLORS = ["#fa4e55", "#ff8b4d", "#ffc24b", "#a6d665", "#43c4a7", "#49b9dd", "#667fe0", "#a37ce2", "#e783c5", "#d7aa68", "#88bfd0", "#b7c85e"];
+const METRIC_COLORS = ["#fa4e55", "#86d9ff", "#ff8b4d", "#ffc24b", "#fae065", "#d2a7ff", "#ff6c9b", "#a6d665", "#43c4a7", "#49b9dd", "#667fe0", "#a37ce2", "#e783c5", "#d7aa68", "#88bfd0", "#b7c85e", "#f2a66b"];
 const COUNTRY_REGIONS = {NED: "NL", USA: "US", GBR: "GB", FRA: "FR", MEX: "MX", ESP: "ES", MON: "MC", CAN: "CA", DEN: "DK", JPN: "JP", THA: "TH", CHN: "CN", GER: "DE", FIN: "FI", AUS: "AU"};
 
 const state = {
@@ -38,6 +38,8 @@ const state = {
   enabled: {},
   language: LOCALES[localStorage.getItem(LANGUAGE_STORAGE_KEY)] ? localStorage.getItem(LANGUAGE_STORAGE_KEY) : "en",
   activePreset: "balanced",
+  pointsMode: "historical",
+  currentPoints: null,
   ranked: [],
   scenarios: [],
   compact: false,
@@ -76,6 +78,7 @@ function applyLanguage(language) {
   document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => { element.placeholder = t(element.dataset.i18nPlaceholder); });
   document.querySelectorAll("[data-i18n-aria]").forEach((element) => { element.setAttribute("aria-label", t(element.dataset.i18nAria)); });
   document.querySelectorAll("[data-i18n-title]").forEach((element) => { element.title = t(element.dataset.i18nTitle); });
+  $("#points-mode-note").hidden = state.pointsMode !== "current";
   const allOption = $("#season-select option[value='all']");
   if (allOption) allOption.textContent = t("allSeasons");
   const modernOption = $("#season-select option[value='modern']");
@@ -87,6 +90,7 @@ function applyLanguage(language) {
     renderQuality();
     populateFilterOptions();
     renderAll();
+    window.APEX_INVERSE.render();
   }
 }
 
@@ -105,6 +109,65 @@ function updateSeasonNote(year) {
   else if (Number(year) < 2023) key = "historicalYearNote";
   note.hidden = !key;
   if (key) note.textContent = t(key);
+}
+
+function rescalePointDependentMetrics() {
+  for (const key of ["championship_points", "points_per_start", "team_points_share"]) {
+    const values = state.dataset.drivers.map((driver) => driver[key]).filter((value) => Number.isFinite(value));
+    const low = Math.min(...values);
+    const high = Math.max(...values);
+    state.dataset.drivers.forEach((driver) => {
+      const value = driver[key];
+      driver.normalised[key] = Number.isFinite(value) ? (low === high ? 1 : (value - low) / (high - low)) : null;
+    });
+  }
+}
+
+function applyPointsMode() {
+  if (!state.dataset) return;
+  const years = state.dataset.years || [];
+  for (const driver of state.dataset.drivers) {
+    driver._historicalPoints ??= {
+      championship_points: driver.championship_points,
+      points_per_start: driver.points_per_start,
+      normalised_points: driver.normalised.championship_points,
+      normalised_per_start: driver.normalised.points_per_start,
+      team_points_share: driver.team_points_share,
+      normalised_team_share: driver.normalised.team_points_share
+    };
+    if (state.pointsMode === "current") {
+      const total = years.reduce((sum, year) => sum + (state.currentPoints.points_by_driver_season[`${driver.driver_id}:${year}`] || 0), 0);
+      driver.championship_points = total;
+      driver.points_per_start = driver.race_starts > 0 ? total / driver.race_starts : null;
+      driver.team_points_share = driver._team_points_share_current;
+    } else {
+      driver.championship_points = driver._historicalPoints.championship_points;
+      driver.points_per_start = driver._historicalPoints.points_per_start;
+      driver.team_points_share = driver._historicalPoints.team_points_share;
+      driver.normalised.championship_points = driver._historicalPoints.normalised_points;
+      driver.normalised.points_per_start = driver._historicalPoints.normalised_per_start;
+      driver.normalised.team_points_share = driver._historicalPoints.normalised_team_share;
+    }
+  }
+  if (state.pointsMode === "current") rescalePointDependentMetrics();
+  $("#points-mode").checked = state.pointsMode === "current";
+  $("#points-mode-note").hidden = state.pointsMode !== "current";
+}
+
+async function setPointsMode(enabled) {
+  if (enabled && !state.currentPoints) {
+    const response = await fetch("./data/current_points.json");
+    if (!response.ok) throw new Error("Current-rules points data is unavailable");
+    state.currentPoints = await response.json();
+  }
+  state.pointsMode = enabled ? "current" : "historical";
+  applyPointsMode();
+  window.APEX_INVERSE.invalidate();
+  if (state.dataset) {
+    state.previousRanks.clear();
+    state.comparisonDirty = true;
+    renderAll();
+  }
 }
 
 function escapeHTML(value) {
@@ -254,9 +317,9 @@ function updateFilterStatus(total, shown) {
 function displayValue(key, value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
   const numeric = Number(value);
-  if (["podium_rate", "finish_rate"].includes(key)) return `${Math.round(numeric * 100)}%`;
+  if (["win_rate", "podium_rate", "finish_rate", "team_points_share"].includes(key)) return `${(numeric * 100).toFixed(1)}%`;
   if (["race_pace_score", "lap_consistency_score"].includes(key)) return `${(numeric * 100).toFixed(1)}%`;
-  if (["wins", "championship_points"].includes(key)) return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
+  if (["race_starts", "wins", "podiums", "pole_positions", "championship_points"].includes(key)) return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
   return numeric.toFixed(1);
 }
 
@@ -344,7 +407,7 @@ function stackedBar(driver, weights, enabled = state.enabled, {small = false} = 
 }
 
 function encodeWeightCode() {
-  const payload = JSON.stringify({v: 2, year: state.dataset?.year, weights: state.weights, enabled: Object.keys(state.enabled).filter((key) => state.enabled[key])});
+  const payload = JSON.stringify({v: 2, year: state.dataset?.year, pointsMode: state.pointsMode, weights: state.weights, enabled: Object.keys(state.enabled).filter((key) => state.enabled[key])});
   const bytes = new TextEncoder().encode(payload);
   let binary = "";
   bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
@@ -736,8 +799,10 @@ async function loadSeason(year, {resetScenarios = true} = {}) {
     state.dataset = await window.APEX_STATIC_DATA.lineup(year);
   }
   state.expandedDrivers.clear();
+  window.APEX_INVERSE.reset();
   state.previousRanks.clear();
   state.visibleLimit = INITIAL_RENDER_LIMIT;
+  applyPointsMode();
   prepareDataset();
   populateFilterOptions();
   applyPreset("balanced", {render: false});
@@ -763,6 +828,7 @@ async function importCode() {
       if (!option && !range) throw new Error(t("importNoSeason", {year: payload.year}));
       await loadSeason(payload.year);
     }
+    await setPointsMode(payload.pointsMode === "current");
     const validKeys = new Set(state.dataset.metrics.map((metric) => metric.key));
     const imported = {};
     Object.entries(payload.weights).forEach(([key, value]) => {
@@ -915,6 +981,8 @@ function setupComparisonObserver() {
 }
 
 function bindEvents() {
+  window.APEX_INVERSE.init({state, t, escapeHTML, driverKey, rankDrivers, renderAll, metricName,
+    metricColor: (key) => METRIC_COLORS[state.dataset.metrics.findIndex((metric) => metric.key === key) % METRIC_COLORS.length]});
   $("#language-select").addEventListener("change", (event) => applyLanguage(event.target.value));
   $("#share-site").addEventListener("click", shareSite);
   $("#reset-weights").addEventListener("click", () => applyPreset("balanced"));
@@ -994,6 +1062,12 @@ function bindEvents() {
   $("#copy-code").addEventListener("click", copyCode);
   $("#import-code").addEventListener("click", importCode);
   $("#season-select").addEventListener("change", (event) => loadSeason(event.target.value));
+  $("#points-mode").addEventListener("change", async (event) => {
+    event.target.disabled = true;
+    try { await setPointsMode(event.target.checked); }
+    catch (error) { event.target.checked = state.pointsMode === "current"; showToast(error.message); }
+    finally { event.target.disabled = false; }
+  });
   $("#year-range-filter").addEventListener("submit", (event) => {
     event.preventDefault();
     applyYearRange();
