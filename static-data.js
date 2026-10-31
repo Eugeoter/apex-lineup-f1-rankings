@@ -17,13 +17,15 @@
     "average_finish_position",
     "average_qualifying_position",
     "average_positions_gained",
-    "finish_rate"
+    "finish_rate",
+    "team_points_share"
   ]);
   const DATA_FILES = {
     history: "./data/merged_rankable_driver_seasons.json",
     profiles: "./data/driver_profiles.json",
-    schema: "./data/metric_schema.json?v=4",
+    schema: "./data/metric_schema.json?v=5",
     poles: "./data/pole_positions.json",
+    teamShare: "./data/team_points_share.json",
     quality: "./data/quality_report.json",
     historicalQuality: "./data/historical_quality_report.json"
   };
@@ -44,12 +46,15 @@
         readJson(DATA_FILES.schema),
         readJson(DATA_FILES.quality),
         readJson(DATA_FILES.historicalQuality),
-        readJson(DATA_FILES.poles)
-      ]).then(([history, profiles, schema, quality, historicalQuality, poles]) => ({
+        readJson(DATA_FILES.poles),
+        readJson(DATA_FILES.teamShare)
+      ]).then(([history, profiles, schema, quality, historicalQuality, poles, teamShare]) => ({
         history,
         profiles: profiles?.drivers || {},
         schema: schema?.metrics || [],
         poles: poles?.poles_by_driver_season || {},
+        teamShare: teamShare?.by_driver_season || {},
+        teamShareMinimum: Number(teamShare?.minimum_comparable_starts) || 10,
         quality,
         historicalQuality
       }));
@@ -87,6 +92,22 @@
     if (!valid.length) return null;
     const totalWeight = valid.reduce((total, [, weight]) => total + weight, 0);
     return round(valid.reduce((total, [value, weight]) => total + value * weight, 0) / totalWeight, 5);
+  }
+
+  function teamPointsShare(rows, shares, minimumStarts, mode) {
+    let weighted = 0;
+    let starts = 0;
+    const numerator = mode === "current" ? 3 : 1;
+    const denominator = mode === "current" ? 4 : 2;
+    rows.forEach((row) => {
+      const segments = shares[`${row.driver_id}:${row.year}`] || [];
+      segments.forEach((segment) => {
+        if (segment[denominator] <= 0 || segment[5] <= 0) return;
+        weighted += segment[numerator] / segment[denominator] * segment[5];
+        starts += segment[5];
+      });
+    });
+    return starts >= minimumStarts ? round(weighted / starts, 5) : null;
   }
 
   function mergeDriverHistory(rows, selection) {
@@ -253,6 +274,7 @@
       {key: "win_rate", label: labels.get("win_rate") || "Grand Prix win rate", higher_is_better: true},
       {key: "podiums", label: labels.get("podiums") || "Grand Prix podiums", higher_is_better: true},
       {key: "pole_positions", label: labels.get("pole_positions") || "Grand Prix pole positions", higher_is_better: true});
+    metrics.push({key: "team_points_share", label: labels.get("team_points_share") || "Share of constructor points", higher_is_better: true});
     if (Math.min(...selected) < MODERN_START_YEAR) {
       metrics = metrics.filter((metric) => HISTORICAL_METRIC_KEYS.has(metric.key));
     }
@@ -265,6 +287,8 @@
     const rows = [...grouped.entries()].map(([identity, history]) => {
       const row = history.length > 1 ? mergeDriverHistory(history, selection) : {...history[0]};
       row.driver_id = identity;
+      row.team_points_share = teamPointsShare(history, data.teamShare, data.teamShareMinimum, "historical");
+      row._team_points_share_current = teamPointsShare(history, data.teamShare, data.teamShareMinimum, "current");
       row.win_rate = Number(row.race_starts) > 0 ? round(Number(row.wins || 0) / Number(row.race_starts), 5) : null;
       if (!Number.isFinite(Number(row.first_year))) row.first_year = Number(row.year) || null;
       if (!Number.isFinite(Number(row.last_year))) row.last_year = Number(row.year) || null;

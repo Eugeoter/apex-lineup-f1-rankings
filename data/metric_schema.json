@@ -80,6 +80,11 @@
       "key": "net_overtakes_per_start",
       "label": "Net overtakes per competitive start",
       "higher_is_better": true
+    },
+    {
+      "key": "team_points_share",
+      "label": "Share of constructor points in comparable GP starts",
+      "higher_is_better": true
     }
   ]
 }

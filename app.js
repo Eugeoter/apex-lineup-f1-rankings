@@ -11,24 +11,24 @@ const RENDER_BATCH = 100;
 const PRESETS = {
   balanced: {
     label: "均衡车手",
-    weights: {championship_points: 13, race_starts: 10, points_per_start: 6, wins: 5, win_rate: 6, podiums: 5, pole_positions: 3, podium_rate: 6, average_finish_position: 8, average_qualifying_position: 6, average_positions_gained: 4, finish_rate: 7, race_pace_score: 7, lap_consistency_score: 6, overtakes_per_start: 4, net_overtakes_per_start: 4}
+    weights: {championship_points: 10, race_starts: 10, points_per_start: 4, wins: 5, win_rate: 6, podiums: 5, pole_positions: 3, podium_rate: 6, average_finish_position: 8, average_qualifying_position: 6, average_positions_gained: 4, finish_rate: 7, race_pace_score: 7, lap_consistency_score: 6, overtakes_per_start: 4, net_overtakes_per_start: 4, team_points_share: 5}
   },
   pace: {
     label: "纯粹速度",
-    weights: {championship_points: 0, race_starts: 5, points_per_start: 5, wins: 0, win_rate: 3, podiums: 0, pole_positions: 7, podium_rate: 2, average_finish_position: 8, average_qualifying_position: 26, average_positions_gained: 0, finish_rate: 2, race_pace_score: 28, lap_consistency_score: 14, overtakes_per_start: 0, net_overtakes_per_start: 0}
+    weights: {championship_points: 0, race_starts: 5, points_per_start: 5, wins: 0, win_rate: 3, podiums: 0, pole_positions: 7, podium_rate: 2, average_finish_position: 8, average_qualifying_position: 26, average_positions_gained: 0, finish_rate: 2, race_pace_score: 28, lap_consistency_score: 14, overtakes_per_start: 0, net_overtakes_per_start: 0, team_points_share: 0}
   },
   racecraft: {
     label: "赛道缠斗",
-    weights: {championship_points: 10, race_starts: 10, points_per_start: 5, wins: 5, win_rate: 2, podiums: 6, pole_positions: 2, podium_rate: 3, average_finish_position: 10, average_qualifying_position: 2, average_positions_gained: 13, finish_rate: 8, race_pace_score: 2, lap_consistency_score: 2, overtakes_per_start: 10, net_overtakes_per_start: 10}
+    weights: {championship_points: 8, race_starts: 10, points_per_start: 4, wins: 5, win_rate: 2, podiums: 6, pole_positions: 2, podium_rate: 3, average_finish_position: 10, average_qualifying_position: 2, average_positions_gained: 13, finish_rate: 8, race_pace_score: 2, lap_consistency_score: 2, overtakes_per_start: 10, net_overtakes_per_start: 10, team_points_share: 3}
   },
   reliability: {
     label: "稳定完赛",
-    weights: {championship_points: 10, race_starts: 10, points_per_start: 8, wins: 3, win_rate: 2, podiums: 6, pole_positions: 1, podium_rate: 7, average_finish_position: 10, average_qualifying_position: 2, average_positions_gained: 3, finish_rate: 25, race_pace_score: 3, lap_consistency_score: 10, overtakes_per_start: 0, net_overtakes_per_start: 0}
+    weights: {championship_points: 10, race_starts: 10, points_per_start: 8, wins: 3, win_rate: 2, podiums: 6, pole_positions: 1, podium_rate: 7, average_finish_position: 10, average_qualifying_position: 2, average_positions_gained: 3, finish_rate: 25, race_pace_score: 3, lap_consistency_score: 10, overtakes_per_start: 0, net_overtakes_per_start: 0, team_points_share: 0}
   }
 };
 
 const SCENARIO_COLORS = ["#f00827", "#43d5ff", "#c7ff38", "#ffb020", "#ba75ff", "#ff6fb1"];
-const METRIC_COLORS = ["#fa4e55", "#86d9ff", "#ff8b4d", "#ffc24b", "#fae065", "#d2a7ff", "#ff6c9b", "#a6d665", "#43c4a7", "#49b9dd", "#667fe0", "#a37ce2", "#e783c5", "#d7aa68", "#88bfd0", "#b7c85e"];
+const METRIC_COLORS = ["#fa4e55", "#86d9ff", "#ff8b4d", "#ffc24b", "#fae065", "#d2a7ff", "#ff6c9b", "#a6d665", "#43c4a7", "#49b9dd", "#667fe0", "#a37ce2", "#e783c5", "#d7aa68", "#88bfd0", "#b7c85e", "#f2a66b"];
 const COUNTRY_REGIONS = {NED: "NL", USA: "US", GBR: "GB", FRA: "FR", MEX: "MX", ESP: "ES", MON: "MC", CAN: "CA", DEN: "DK", JPN: "JP", THA: "TH", CHN: "CN", GER: "DE", FIN: "FI", AUS: "AU"};
 
 const state = {
@@ -111,8 +111,8 @@ function updateSeasonNote(year) {
   if (key) note.textContent = t(key);
 }
 
-function rescalePointsMetrics() {
-  for (const key of ["championship_points", "points_per_start"]) {
+function rescalePointDependentMetrics() {
+  for (const key of ["championship_points", "points_per_start", "team_points_share"]) {
     const values = state.dataset.drivers.map((driver) => driver[key]).filter((value) => Number.isFinite(value));
     const low = Math.min(...values);
     const high = Math.max(...values);
@@ -131,20 +131,25 @@ function applyPointsMode() {
       championship_points: driver.championship_points,
       points_per_start: driver.points_per_start,
       normalised_points: driver.normalised.championship_points,
-      normalised_per_start: driver.normalised.points_per_start
+      normalised_per_start: driver.normalised.points_per_start,
+      team_points_share: driver.team_points_share,
+      normalised_team_share: driver.normalised.team_points_share
     };
     if (state.pointsMode === "current") {
       const total = years.reduce((sum, year) => sum + (state.currentPoints.points_by_driver_season[`${driver.driver_id}:${year}`] || 0), 0);
       driver.championship_points = total;
       driver.points_per_start = driver.race_starts > 0 ? total / driver.race_starts : null;
+      driver.team_points_share = driver._team_points_share_current;
     } else {
       driver.championship_points = driver._historicalPoints.championship_points;
       driver.points_per_start = driver._historicalPoints.points_per_start;
+      driver.team_points_share = driver._historicalPoints.team_points_share;
       driver.normalised.championship_points = driver._historicalPoints.normalised_points;
       driver.normalised.points_per_start = driver._historicalPoints.normalised_per_start;
+      driver.normalised.team_points_share = driver._historicalPoints.normalised_team_share;
     }
   }
-  if (state.pointsMode === "current") rescalePointsMetrics();
+  if (state.pointsMode === "current") rescalePointDependentMetrics();
   $("#points-mode").checked = state.pointsMode === "current";
   $("#points-mode-note").hidden = state.pointsMode !== "current";
 }
@@ -312,7 +317,7 @@ function updateFilterStatus(total, shown) {
 function displayValue(key, value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
   const numeric = Number(value);
-  if (["win_rate", "podium_rate", "finish_rate"].includes(key)) return `${(numeric * 100).toFixed(1)}%`;
+  if (["win_rate", "podium_rate", "finish_rate", "team_points_share"].includes(key)) return `${(numeric * 100).toFixed(1)}%`;
   if (["race_pace_score", "lap_consistency_score"].includes(key)) return `${(numeric * 100).toFixed(1)}%`;
   if (["race_starts", "wins", "podiums", "pole_positions", "championship_points"].includes(key)) return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
   return numeric.toFixed(1);
